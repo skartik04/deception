@@ -17,3 +17,7 @@ logs/
 
 # OS
 .DS_Store
+
+
+# notes
+notes/
