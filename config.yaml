@@ -3,7 +3,7 @@ suspect:
   threshold: 9  # must get >= 9 out of 10 correct to qualify
 
 judge:
-  model: "openrouter/openai/gpt-oss-20b"
+  model: "openrouter/meta-llama/llama-3.1-8b-instruct"
   threshold: 2  # must get <= 2 out of 10 correct to qualify (i.e., fail 8+)
 
 dataset:

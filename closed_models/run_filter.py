@@ -65,16 +65,18 @@ def run_filtering(role: str) -> None:
             model=model,
             epochs=1,
             log_dir=str(PROJECT_ROOT / "logs"),
-            generate_config=GenerateConfig(temperature=temperature),
+            generate_config=GenerateConfig(temperature=temperature, max_connections=50),
         )
 
         for result in results:
             if result.location:
                 # Rename: {model_name}_{subset}_{num_questions}_{hash}.eval
-                model_short = sanitize_model_name(model.split("/")[-1])
-                hash_part = old_path.stem.split("_")[-1]
-                new_name = f"{model_short}_{subset}_{config.dataset.num_questions}_{hash_part}.eval"
                 old_path = Path(result.location)
+                model_short = sanitize_model_name(model.split("/")[-1])
+                parts = old_path.stem.split("_")
+                date_part = parts[0]
+                hash_part = parts[-1]
+                new_name = f"{date_part}_{model_short}_{subset}_{config.dataset.num_questions}_{hash_part}.eval"
                 new_path = old_path.parent / new_name
                 old_path.rename(new_path)
                 log_paths.append(str(new_path))

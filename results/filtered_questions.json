@@ -1,0 +1,17 @@
+{
+  "suspect_model": "openrouter/openai/gpt-oss-120b",
+  "judge_model": "openrouter/meta-llama/llama-3.1-8b-instruct",
+  "suspect_file": "results/suspect_openrouter-openai-gpt-oss-120b.json",
+  "judge_file": "results/judge_openrouter-meta-llama-llama-3-1-8b-instruct.json",
+  "timestamp": "2026-03-28T12:04:08.937792+00:00",
+  "filtered_ids": [
+    37,
+    57,
+    58
+  ],
+  "stats": {
+    "suspect_qualifying": 45,
+    "judge_qualifying": 17,
+    "intersection": 3
+  }
+}

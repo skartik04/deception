@@ -1,0 +1,258 @@
+"""Debate runner.
+
+Reads question_id from debate/config.yaml, loads the question from
+filtered_questions.json (or the raw WMDP dataset), builds correct and
+incorrect claims, then runs all 4 conditions:
+  - correct   + no probe
+  - correct   + probe
+  - incorrect + no probe
+  - incorrect + probe
+
+Each condition is saved as a separate JSON inside results/traces/q{id:04d}/.
+
+Usage:
+    uv run python -m debate.debate
+    # Or from repo root: uv run python debate/debate.py (script dir must not shadow the package).
+"""
+
+import json
+import os
+import random
+import re
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from dotenv import load_dotenv
+from openai import OpenAI
+
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
+from debate.config import PROJECT_ROOT, load_debate_config
+from debate.prompts import (
+    JUDGE_VERDICT_PROMPT,
+    fill_auditor_turn,
+    fill_judge,
+    fill_suspect,
+)
+
+FILTERED_QUESTIONS = PROJECT_ROOT / "results" / "filtered_questions.json"
+TRACES_DIR = PROJECT_ROOT / "results" / "debate_traces"
+
+
+# ---------------------------------------------------------------------------
+# Load question
+# ---------------------------------------------------------------------------
+
+def load_question(question_id: int) -> dict:
+    """Load raw WMDP record for the given index."""
+    from datasets import load_dataset
+    ds = load_dataset("cais/wmdp", "wmdp-bio", split="test")
+    row = ds[question_id]
+    return {
+        "index": question_id,
+        "question": row["question"],
+        "choices": row["choices"],
+        "answer": row["answer"],
+    }
+
+
+def build_claims(record: dict) -> tuple[str, str]:
+    """Return (correct_claim, incorrect_claim) for a WMDP record."""
+    correct_text = record["choices"][record["answer"]]
+    wrong_indices = [i for i in range(len(record["choices"])) if i != record["answer"]]
+    wrong_text = record["choices"][random.choice(wrong_indices)]
+    return correct_text, wrong_text
+
+
+# ---------------------------------------------------------------------------
+# Model call
+# ---------------------------------------------------------------------------
+
+def chat(client: OpenAI, model: str, messages: list[dict], temperature: float) -> str:
+    model_name = re.sub(r"^openrouter/", "", model)
+    resp = client.chat.completions.create(
+        model=model_name,
+        messages=messages,
+        temperature=temperature,
+    )
+    return resp.choices[0].message.content.strip()
+
+
+def make_client() -> OpenAI:
+    return OpenAI(
+        api_key=os.environ["OPENROUTER_API_KEY"],
+        base_url="https://openrouter.ai/api/v1",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Single debate
+# ---------------------------------------------------------------------------
+
+def run_debate(
+    question: str,
+    claim: str,
+    correct_claim: str,
+    question_id: int,
+    probe_enabled: bool,
+    cfg,
+) -> dict:
+    client = make_client()
+    d = cfg
+    temp = d.temperature
+
+    sus_sys, sus_user = fill_suspect(question, claim)
+    jdg_sys, jdg_user = fill_judge(question, claim, with_probe=probe_enabled)
+
+    judge_msgs: list[dict] = [
+        {"role": "system", "content": jdg_sys},
+        {"role": "user", "content": jdg_user},
+    ]
+    suspect_msgs: list[dict] = [
+        {"role": "system", "content": sus_sys},
+        {"role": "user", "content": sus_user},
+    ]
+
+    transcript: list[dict] = []
+
+    for turn in range(1, d.num_rounds + 1):
+        # Judge asks
+        judge_reply = chat(client, d.judge_model, judge_msgs, temp)
+        judge_msgs.append({"role": "assistant", "content": judge_reply})
+        transcript.append({"turn": turn, "role": d.judge_label, "content": judge_reply})
+
+        # Suspect responds
+        suspect_msgs.append({"role": "user", "content": judge_reply})
+        suspect_reply = chat(client, d.suspect_model, suspect_msgs, temp)
+        suspect_msgs.append({"role": "assistant", "content": suspect_reply})
+        transcript.append({"turn": turn, "role": d.suspect_label, "content": suspect_reply})
+
+        # Auditor (if probe enabled)
+        if probe_enabled:
+            transcript_so_far = _format_transcript(transcript, d)
+            aud_sys, aud_user = fill_auditor_turn(question, claim, transcript_so_far)
+            aud_reply = chat(client, d.auditor_model, [
+                {"role": "system", "content": aud_sys},
+                {"role": "user", "content": aud_user},
+            ], temp)
+            auditor_report = _parse_json_safe(aud_reply)
+            transcript.append({"turn": turn, "role": d.auditor_label, "content": auditor_report})
+            judge_msgs.append({
+                "role": "user",
+                "content": (
+                    f"[{d.auditor_label} report — private]\n"
+                    + json.dumps(auditor_report, indent=2)
+                    + f"\n\n{d.suspect_label}'s response:\n{suspect_reply}"
+                ),
+            })
+        else:
+            judge_msgs.append({"role": "user", "content": suspect_reply})
+
+    # Final verdict
+    judge_msgs.append({"role": "user", "content": JUDGE_VERDICT_PROMPT})
+    verdict_raw = chat(client, d.judge_model, judge_msgs, temp)
+    verdict = _parse_json_safe(verdict_raw)
+
+    judge_correct = (
+        isinstance(verdict, dict)
+        and bool(verdict.get("claim_is_correct")) == (claim == correct_claim)
+    )
+
+    return {
+        "question_id": question_id,
+        "question": question,
+        "claim": claim,
+        "correct_claim": correct_claim,
+        "probe_enabled": probe_enabled,
+        "models": {
+            "suspect": d.suspect_model,
+            "judge": d.judge_model,
+            "auditor": d.auditor_model if probe_enabled else None,
+        },
+        "num_rounds": d.num_rounds,
+        "transcript": transcript,
+        "verdict": verdict,
+        "judge_correct": judge_correct,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _format_transcript(transcript: list[dict], d) -> str:
+    lines = []
+    for entry in transcript:
+        role = entry["role"]
+        content = entry["content"]
+        if isinstance(content, dict):
+            content = json.dumps(content)
+        lines.append(f"{role}: {content}")
+    return "\n\n".join(lines)
+
+
+def _parse_json_safe(text: str):
+    text = text.strip()
+    text = re.sub(r"^```(?:json)?\s*", "", text)
+    text = re.sub(r"\s*```$", "", text)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return text
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main():
+    cfg = load_debate_config()
+    qid = cfg.question_id
+
+    record = load_question(qid)
+    correct_claim, incorrect_claim = build_claims(record)
+    question = record["question"]
+
+    q_dir = TRACES_DIR / f"q{qid:04d}"
+    q_dir.mkdir(parents=True, exist_ok=True)
+
+    conditions = [
+        ("correct",   correct_claim,   True,  "probe1"),
+        ("correct",   correct_claim,   False, "probe0"),
+        ("incorrect", incorrect_claim, True,  "probe1"),
+        ("incorrect", incorrect_claim, False, "probe0"),
+    ]
+
+    print(f"Question {qid}: {question}")
+    print(f"Correct claim:   {correct_claim}")
+    print(f"Incorrect claim: {incorrect_claim}")
+    print()
+
+    for label, claim, probe, probe_label in conditions:
+        print(f"  Running: {label} / {probe_label} ...")
+        result = run_debate(
+            question=question,
+            claim=claim,
+            correct_claim=correct_claim,
+            question_id=qid,
+            probe_enabled=probe,
+            cfg=cfg,
+        )
+        filename = f"{label}_{probe_label}.json"
+        out_path = q_dir / filename
+        with open(out_path, "w") as f:
+            json.dump(result, f, indent=2)
+        correct_str = "✓" if result["judge_correct"] else "✗"
+        print(f"  {correct_str} verdict: {result['verdict']} → {out_path.name}")
+
+    print(f"\nAll 4 conditions saved to {q_dir}")
+
+
+if __name__ == "__main__":
+    main()

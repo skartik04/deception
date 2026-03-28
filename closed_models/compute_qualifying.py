@@ -69,8 +69,10 @@ def compute_qualifying(
             meta = sample.metadata or {}
             framing = meta.get("framing", "unknown")
             correct = False
-            if sample.score and sample.score.value:
-                correct = sample.score.value == "C"
+            if sample.scores:
+                s = next(iter(sample.scores.values()), None)
+                if s and s.value:
+                    correct = s.value == "C"
             framing_scores[framing].append(correct)
 
     qualifying_ids = []
@@ -98,6 +100,7 @@ def compute_qualifying(
         "dataset": config_snapshot.get("dataset", {}),
         "framings": config_snapshot.get("framings", {}),
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        "qualifying_count": len(qualifying_ids),
         "qualifying_ids": qualifying_ids,
         "stats": {
             "total_questions": len(all_scores),

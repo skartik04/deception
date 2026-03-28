@@ -21,3 +21,7 @@ logs/
 
 # notes
 notes/
+
+
+# debate traces
+results/debate_traces/
