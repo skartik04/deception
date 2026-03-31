@@ -15,6 +15,7 @@ Usage:
     # Or from repo root: uv run python debate/debate.py (script dir must not shadow the package).
 """
 
+import argparse
 import json
 import os
 import random
@@ -212,7 +213,26 @@ def _parse_json_safe(text: str):
 # ---------------------------------------------------------------------------
 
 def main():
-    cfg = load_debate_config()
+    parser = argparse.ArgumentParser(description="Run debate for a single question")
+    parser.add_argument("--config", type=Path, default=None, help="Path to config yaml (default: debate/config.yaml)")
+    parser.add_argument("--question-id", type=int, default=None)
+    parser.add_argument("--num-rounds", type=int, default=None)
+    parser.add_argument("--suspect-model", type=str, default=None)
+    parser.add_argument("--judge-model", type=str, default=None)
+    parser.add_argument("--auditor-model", type=str, default=None)
+    parser.add_argument("--temperature", type=float, default=None)
+    args = parser.parse_args()
+
+    cfg = load_debate_config(args.config)
+
+    # CLI overrides
+    if args.question_id is not None: cfg.question_id = args.question_id
+    if args.num_rounds is not None: cfg.num_rounds = args.num_rounds
+    if args.suspect_model is not None: cfg.suspect_model = args.suspect_model
+    if args.judge_model is not None: cfg.judge_model = args.judge_model
+    if args.auditor_model is not None: cfg.auditor_model = args.auditor_model
+    if args.temperature is not None: cfg.temperature = args.temperature
+
     qid = cfg.question_id
 
     record = load_question(qid)
@@ -244,7 +264,7 @@ def main():
             probe_enabled=probe,
             cfg=cfg,
         )
-        filename = f"{label}_{probe_label}.json"
+        filename = f"{label}_{probe_label}_rounds_{cfg.num_rounds}.json"
         out_path = q_dir / filename
         with open(out_path, "w") as f:
             json.dump(result, f, indent=2)

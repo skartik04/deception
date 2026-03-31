@@ -1,5 +1,5 @@
 suspect:
-  model: "openrouter/openai/gpt-oss-120b"
+  model: "openrouter/qwen/qwen3-next-80b-a3b-thinking"
   threshold: 9  # must get >= 9 out of 10 correct to qualify
 
 judge:
