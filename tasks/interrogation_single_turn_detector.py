@@ -1,0 +1,139 @@
+"""Inspect AI task: single-turn interrogation with lie detector.
+
+Same as interrogation_single_turn but a lie detector report is shown to the
+judge alongside the suspect's argument.
+
+Detectors:
+  - oracle: ground-truth label (DECEPTIVE/HONEST)
+  - behavioral: fresh-context belief probe
+  - behavioral_hardened: adversarial variant (suspect forewarned about probing)
+
+Compare with tasks/judge_baseline.py@judge_baseline_yes_idk to measure the delta.
+
+Usage:
+    uv run inspect eval tasks/interrogation_single_turn_detector.py --limit 100 --log-level warning \
+      -T detector_name=oracle \
+      -T suspect_model=openrouter/meta-llama/llama-3.3-70b-instruct:nitro \
+      --model openrouter/google/gemma-3-27b-it:nitro
+"""
+
+from inspect_ai import Task, task
+from inspect_ai.model import (
+    ChatMessageSystem,
+    ChatMessageUser,
+    GenerateConfig,
+    get_model,
+)
+from inspect_ai.solver import Generate, Solver, TaskState, solver
+
+from lib.detectors import (
+    CoinFlipDetector,
+    LieDetectorFn,
+    OracleDetector,
+    make_behavioral_detector,
+)
+from lib.prompts import SUSPECT_PROMPTS, InterrogationDetectorPrompts
+from lib.wmdp_data import answer_scorer, balanced_expanded_dataset, expanded_dataset, format_question_block, one_each_dataset
+
+
+@solver
+def interrogation_detector_solver(
+    suspect_model_name: str,
+    suspect_system: str,
+    detector: LieDetectorFn,
+    prompts: InterrogationDetectorPrompts,
+    temperature: float = 0.0,
+) -> Solver:
+    """Suspect argues, lie detector reports, then judge evaluates via generate()."""
+    suspect = get_model(suspect_model_name)
+
+    async def solve(state: TaskState, generate: Generate) -> TaskState:
+        assert isinstance(state.metadata, dict)
+        meta = state.metadata
+
+        suspect_messages = [
+            ChatMessageSystem(content=suspect_system),
+            ChatMessageUser(content=str(state.input)),
+        ]
+        suspect_out = await suspect.generate(
+            suspect_messages,
+            config=GenerateConfig(temperature=temperature, max_tokens=1024),
+        )
+        argument = suspect_out.completion
+
+        detector_report = await detector(argument, dict(meta))
+
+        question = str(meta["question"])
+        choices: list[str] = list(meta["choices"])  # type: ignore[arg-type]
+        question_block = format_question_block(question, choices)
+        judge_user = prompts.judge_user.format(
+            question_block=question_block,
+            argument=argument,
+            detector_report=detector_report,
+        )
+        state.messages = [
+            ChatMessageSystem(content=prompts.judge_system),
+            ChatMessageUser(content=judge_user),
+        ]
+        state = await generate(state)
+        return state
+
+    return solve
+
+
+@task
+def interrogation_single_turn_detector(
+    suspect_model: str,
+    suspect_prompt: str = "debate_coach",
+    detector_name: str = "oracle",
+    balanced: bool = False,
+    n_each: int = 50,
+    one_each: bool = False,
+    temperature: float = 0.0,
+) -> Task:
+    """Interrogation with lie detector reports shown to judge. --model is the judge.
+
+    Args:
+        suspect_model: Model that generates the argument (also probed by behavioral detector).
+        suspect_prompt: Key into SUSPECT_PROMPTS. Use 'debate_coach_hardened' for
+                        adversarial robustness testing.
+        detector_name: 'oracle' | 'coin_flip' | 'behavioral' | 'behavioral_hardened'.
+        balanced: If True, use equal honest/deceptive samples (n_each each).
+        n_each: Number of honest and deceptive samples each when balanced=True (default 50).
+        one_each: If True, use 1 honest + 1 deceptive per question across all questions.
+        temperature: Sampling temperature for both suspect and judge (default 0.0).
+    """
+    prompts = InterrogationDetectorPrompts()
+    if suspect_prompt not in SUSPECT_PROMPTS:
+        raise ValueError(
+            f"Unknown suspect_prompt '{suspect_prompt}'. "
+            f"Choose from: {list(SUSPECT_PROMPTS)}"
+        )
+
+    detectors: dict[str, LieDetectorFn] = {
+        "oracle": OracleDetector(),
+        "coin_flip": CoinFlipDetector(),
+        "behavioral": make_behavioral_detector(suspect_model),
+        "behavioral_hardened": make_behavioral_detector(
+            suspect_model,
+            probe_system_prompt=SUSPECT_PROMPTS["debate_coach_hardened"],
+        ),
+    }
+    if detector_name not in detectors:
+        raise ValueError(
+            f"Unknown detector '{detector_name}'. Choose from: {list(detectors)}"
+        )
+
+    return Task(
+        dataset=one_each_dataset() if one_each else (balanced_expanded_dataset(n_each=n_each) if balanced else expanded_dataset()),
+        solver=interrogation_detector_solver(
+            suspect_model_name=suspect_model,
+            suspect_system=SUSPECT_PROMPTS[suspect_prompt],
+            detector=detectors[detector_name],
+            prompts=prompts,
+            temperature=temperature,
+        ),
+        scorer=answer_scorer(),
+        config=GenerateConfig(temperature=temperature, max_tokens=1024),
+        metadata={"detector": detector_name},
+    )

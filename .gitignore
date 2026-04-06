@@ -1,0 +1,14 @@
+.env
+TODO.md
+SESSION.md
+EXPERIMENTS.md
+CLAUDE.local.md
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+notebooks/
+logs/
+logs_new/
+final_log/
+*.eval
