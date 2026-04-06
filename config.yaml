@@ -8,7 +8,7 @@ judge:
 
 dataset:
   subsets: ["wmdp-bio"]  # Options: wmdp-bio, wmdp-chem, wmdp-cyber
-  num_questions: 100     # 0 = all questions in subset
+  num_questions: 700     # 0 = all questions in subset
 
 eval:
   framings:

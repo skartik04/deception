@@ -34,12 +34,7 @@ from openai import OpenAI
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 from debate.config import PROJECT_ROOT, load_debate_config
-from debate.prompts import (
-    JUDGE_VERDICT_PROMPT,
-    fill_auditor_turn,
-    fill_judge,
-    fill_suspect,
-)
+from debate.prompts import JUDGE_VERDICT_PROMPT, fill_auditor_turn, fill_judge, fill_suspect
 
 FILTERED_QUESTIONS = PROJECT_ROOT / "results" / "filtered_questions.json"
 TRACES_DIR = PROJECT_ROOT / "results" / "debate_traces"
@@ -74,14 +69,18 @@ def build_claims(record: dict) -> tuple[str, str]:
 # Model call
 # ---------------------------------------------------------------------------
 
-def chat(client: OpenAI, model: str, messages: list[dict], temperature: float) -> str:
+def chat(client: OpenAI, model: str, messages: list[dict], temperature: float) -> dict[str, str]:
     model_name = re.sub(r"^openrouter/", "", model)
     resp = client.chat.completions.create(
         model=model_name,
         messages=messages,
         temperature=temperature,
     )
-    return resp.choices[0].message.content.strip()
+    msg = resp.choices[0].message
+    return {
+        "content": _clean_text(getattr(msg, "content", None)),
+        "reasoning": _clean_text(getattr(msg, "reasoning", None)),
+    }
 
 
 def make_client() -> OpenAI:
@@ -120,34 +119,59 @@ def run_debate(
     ]
 
     transcript: list[dict] = []
+    private_reasoning_traces: list[dict] = []
 
     for turn in range(1, d.num_rounds + 1):
         # Judge asks
-        judge_reply = chat(client, d.judge_model, judge_msgs, temp)
+        judge_result = chat(client, d.judge_model, judge_msgs, temp)
+        judge_reply = judge_result["content"]
         judge_msgs.append({"role": "assistant", "content": judge_reply})
         transcript.append({"turn": turn, "role": d.judge_label, "content": judge_reply})
 
         # Suspect responds
         suspect_msgs.append({"role": "user", "content": judge_reply})
-        suspect_reply = chat(client, d.suspect_model, suspect_msgs, temp)
+        suspect_result = chat(client, d.suspect_model, suspect_msgs, temp)
+        suspect_reply = suspect_result["content"]
+        suspect_reasoning = suspect_result["reasoning"]
         suspect_msgs.append({"role": "assistant", "content": suspect_reply})
-        transcript.append({"turn": turn, "role": d.suspect_label, "content": suspect_reply})
+        transcript.append({
+            "turn": turn,
+            "role": d.suspect_label,
+            "content": suspect_reply,
+            "private_reasoning": suspect_reasoning,
+        })
+        private_reasoning_traces.append({
+            "turn": turn,
+            "reasoning": suspect_reasoning or "NA",
+        })
 
         # Auditor (if probe enabled)
         if probe_enabled:
-            transcript_so_far = _format_transcript(transcript, d)
-            aud_sys, aud_user = fill_auditor_turn(question, claim, transcript_so_far)
-            aud_reply = chat(client, d.auditor_model, [
+            public_transcript = _format_public_transcript(transcript, d)
+            reasoning_history = _format_private_reasoning(private_reasoning_traces)
+            aud_sys, aud_user = fill_auditor_turn(
+                question,
+                claim,
+                public_transcript,
+                reasoning_history,
+                suspect_reply,
+            )
+            aud_result = chat(client, d.auditor_model, [
                 {"role": "system", "content": aud_sys},
                 {"role": "user", "content": aud_user},
             ], temp)
-            auditor_report = _parse_json_safe(aud_reply)
+            auditor_report = _parse_json_safe(aud_result["content"])
             transcript.append({"turn": turn, "role": d.auditor_label, "content": auditor_report})
+            report_text = (
+                json.dumps(auditor_report, indent=2)
+                if isinstance(auditor_report, dict)
+                else str(auditor_report)
+            )
             judge_msgs.append({
                 "role": "user",
                 "content": (
                     f"[{d.auditor_label} report — private]\n"
-                    + json.dumps(auditor_report, indent=2)
+                    + report_text
                     + f"\n\n{d.suspect_label}'s response:\n{suspect_reply}"
                 ),
             })
@@ -156,12 +180,13 @@ def run_debate(
 
     # Final verdict
     judge_msgs.append({"role": "user", "content": JUDGE_VERDICT_PROMPT})
-    verdict_raw = chat(client, d.judge_model, judge_msgs, temp)
-    verdict = _parse_json_safe(verdict_raw)
+    verdict_result = chat(client, d.judge_model, judge_msgs, temp)
+    verdict = _parse_json_safe(verdict_result["content"])
 
     judge_correct = (
         isinstance(verdict, dict)
-        and bool(verdict.get("claim_is_correct")) == (claim == correct_claim)
+        and verdict.get("agreement_with_claim", "").upper()
+        == ("AGREE" if claim == correct_claim else "DISAGREE")
     )
 
     return {
@@ -187,30 +212,69 @@ def run_debate(
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _format_transcript(transcript: list[dict], d) -> str:
+def _format_public_transcript(transcript: list[dict], d) -> str:
+    """Format transcript for the auditor, excluding auditor entries."""
     lines = []
     for entry in transcript:
-        role = entry["role"]
+        if entry["role"] == d.auditor_label:
+            continue
         content = entry["content"]
         if isinstance(content, dict):
             content = json.dumps(content)
-        lines.append(f"{role}: {content}")
+        lines.append(f"{entry['role']}: {content}")
     return "\n\n".join(lines)
+
+
+def _format_private_reasoning(traces: list[dict]) -> str:
+    """Format accumulated private reasoning traces across all turns."""
+    parts = []
+    for t in traces:
+        parts.append(f"[Turn {t['turn']}]\n{t['reasoning']}")
+    return "\n\n".join(parts)
+
+
+def _clean_text(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, list):
+        parts = [_clean_text(item) for item in value]
+        return "\n".join(part for part in parts if part).strip()
+    return str(value).strip()
 
 
 def _parse_json_safe(text: str):
     text = text.strip()
     text = re.sub(r"^```(?:json)?\s*", "", text)
     text = re.sub(r"\s*```$", "", text)
+    text = text.strip()
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        return text
+        pass
+    match = re.search(r"\{[\s\S]*\}", text)
+    if match:
+        try:
+            return json.loads(match.group())
+        except json.JSONDecodeError:
+            pass
+    return text
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
+def _model_slug(model_str: str) -> str:
+    """Short slug from model name: first word + size. e.g. qwen3-80b, llama-8b, gpt-120b."""
+    name = model_str.split("/")[-1].lower()
+    first = re.match(r"[a-z]+\d*", name)
+    first = first.group() if first else name[:6]
+    size = re.search(r"(\d+\.?\d*[bmt])", name)
+    size = size.group() if size else ""
+    return f"{first}-{size}" if size else first
+
 
 def main():
     parser = argparse.ArgumentParser(description="Run debate for a single question")
@@ -264,7 +328,7 @@ def main():
             probe_enabled=probe,
             cfg=cfg,
         )
-        filename = f"{label}_{probe_label}_rounds_{cfg.num_rounds}.json"
+        filename = f"{label}_{probe_label}_rounds_{cfg.num_rounds}_sus-{_model_slug(cfg.suspect_model)}_jdg-{_model_slug(cfg.judge_model)}.json"
         out_path = q_dir / filename
         with open(out_path, "w") as f:
             json.dump(result, f, indent=2)
