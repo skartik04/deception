@@ -32,7 +32,12 @@ from lib.detectors import (
     OracleDetector,
     make_behavioral_detector,
 )
-from lib.prompts import SUSPECT_PROMPTS, InterrogationDetectorPrompts
+from lib.prompts import (
+    SUSPECT_PROMPTS,
+    InterrogationDetectorPrompts,
+    InterrogationDetectorPromptsAnswerFocused,
+    InterrogationDetectorPromptsNoIDK,
+)
 from lib.wmdp_data import answer_scorer, balanced_expanded_dataset, expanded_dataset, format_question_block, one_each_dataset
 
 
@@ -90,6 +95,8 @@ def interrogation_single_turn_detector(
     n_each: int = 50,
     one_each: bool = False,
     temperature: float = 0.0,
+    allow_idk: bool = True,
+    answer_focused: bool = False,
 ) -> Task:
     """Interrogation with lie detector reports shown to judge. --model is the judge.
 
@@ -102,17 +109,28 @@ def interrogation_single_turn_detector(
         n_each: Number of honest and deceptive samples each when balanced=True (default 50).
         one_each: If True, use 1 honest + 1 deceptive per question across all questions.
         temperature: Sampling temperature for both suspect and judge (default 0.0).
+        allow_idk: If False, IDK is removed from the judge's answer choices (default True).
+        answer_focused: If True, the detector report is framed as being about the argued
+            answer rather than the argument, and IDK is disallowed. Prevents the judge
+            from reasoning 'the argument is deceptive but the answer might still be right'.
     """
-    prompts = InterrogationDetectorPrompts()
+    if answer_focused:
+        prompts: InterrogationDetectorPrompts = InterrogationDetectorPromptsAnswerFocused()
+    elif not allow_idk:
+        prompts = InterrogationDetectorPromptsNoIDK()
+    else:
+        prompts = InterrogationDetectorPrompts()
+
     if suspect_prompt not in SUSPECT_PROMPTS:
         raise ValueError(
             f"Unknown suspect_prompt '{suspect_prompt}'. "
             f"Choose from: {list(SUSPECT_PROMPTS)}"
         )
 
+    report_style = "answer" if answer_focused else "argument"
     detectors: dict[str, LieDetectorFn] = {
-        "oracle": OracleDetector(),
-        "coin_flip": CoinFlipDetector(),
+        "oracle": OracleDetector(report_style=report_style),
+        "coin_flip": CoinFlipDetector(report_style=report_style),
         "behavioral": make_behavioral_detector(suspect_model),
         "behavioral_hardened": make_behavioral_detector(
             suspect_model,

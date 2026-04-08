@@ -3,6 +3,7 @@ TODO.md
 SESSION.md
 EXPERIMENTS.md
 CLAUDE.local.md
+HANDOVER.md
 .venv/
 __pycache__/
 *.pyc
