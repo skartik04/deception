@@ -500,6 +500,151 @@ def one_each_dataset(
     return MemoryDataset(samples=combined, name="wmdp-bio-one-each")
 
 
+def _load_filter_json(name: str) -> dict:
+    """Load a Kartik filter JSON by filename stem."""
+    path = FILTERINGS_DIR / (name if name.endswith(".json") else f"{name}.json")
+    if not path.exists():
+        available = [f.stem for f in FILTERINGS_DIR.glob("*.json")]
+        raise FileNotFoundError(
+            f"No filter file at {path}. Available: {available}"
+        )
+    return json.loads(path.read_text())
+
+
+def original_dataset_filtered(
+    filter_files: list[str] | str,
+) -> MemoryDataset:
+    """Load unique WMDP questions from filter files as neutral samples (no argue_target expansion).
+
+    Used for judge baseline tasks — judge sees just the question, no suspect argument.
+    """
+    from datasets import load_dataset as hf_load
+
+    if isinstance(filter_files, str):
+        filter_files = [filter_files]
+
+    all_samples: list[Sample] = []
+
+    for name in filter_files:
+        data = _load_filter_json(name)
+        qualifying_ids: list[int] = data["qualifying_ids"]
+        subsets: list[str] = data.get("dataset", {}).get("subsets", [])
+        if len(subsets) != 1:
+            raise ValueError(
+                f"Filter file '{name}' covers {subsets} — expected exactly one subset."
+            )
+        subset = subsets[0]
+
+        hf_ds = hf_load("cais/wmdp", subset, split="test")
+
+        for idx in qualifying_ids:
+            record = hf_ds[idx]
+            question: str = record["question"]
+            choices: list[str] = record["choices"]
+            answer_idx: int = record["answer"]
+            correct_letter = chr(65 + answer_idx)
+
+            all_samples.append(
+                Sample(
+                    input=format_question_block(question, choices),
+                    target=correct_letter,
+                    metadata={
+                        "question": question,
+                        "choices": choices,
+                        "correct_letter": correct_letter,
+                        "answer_idx": answer_idx,
+                        "wmdp_subset": subset,
+                        "original_id": idx,
+                        "is_deceptive": False,
+                    },
+                )
+            )
+
+    return MemoryDataset(samples=all_samples, name="wmdp-multi-filtered-baseline")
+
+
+def expanded_dataset_filtered(
+    filter_files: list[str] | str,
+) -> MemoryDataset:
+    """Load WMDP questions from one or more subsets via Kartik's filter JSONs.
+
+    Each filter JSON (from kartik_deception/results/) covers one WMDP subset
+    (bio/chem/cyber) and records which question indices the judge failed on.
+    Questions are loaded from HuggingFace and expanded to 4 argue_target
+    samples per question (A-D), just like expanded_dataset().
+
+    No liars-bench knowledge fields — the filter already encodes
+    "suspect knows / judge doesn't".
+
+    Args:
+        filter_files: Single JSON filename stem or list of stems, e.g.:
+            "judge_openrouter-google-gemma-3-27b-it-nitro_wmdp-bio_thresh3"
+    """
+    from datasets import load_dataset as hf_load
+
+    if isinstance(filter_files, str):
+        filter_files = [filter_files]
+
+    prompts = SuspectArgumentPrompts()
+    all_samples: list[Sample] = []
+
+    for name in filter_files:
+        data = _load_filter_json(name)
+        qualifying_ids: list[int] = data["qualifying_ids"]
+        subsets: list[str] = data.get("dataset", {}).get("subsets", [])
+        if len(subsets) != 1:
+            raise ValueError(
+                f"Filter file '{name}' covers {subsets} — expected exactly one subset. "
+                "Run the filter pipeline per-subset (each file should cover one subset)."
+            )
+        subset = subsets[0]
+
+        hf_ds = hf_load("cais/wmdp", subset, split="test")
+
+        for idx in qualifying_ids:
+            record = hf_ds[idx]
+            question: str = record["question"]
+            choices: list[str] = record["choices"]
+            answer_idx: int = record["answer"]
+            correct_letter = chr(65 + answer_idx)
+            question_block = format_question_block(question, choices)
+
+            base_metadata: dict[str, object] = {
+                "question": question,
+                "choices": choices,
+                "correct_letter": correct_letter,
+                "answer_idx": answer_idx,
+                "wmdp_subset": subset,
+                "original_id": idx,
+            }
+
+            for argue_idx in range(len(choices)):
+                argue_target = chr(65 + argue_idx)
+                argue_target_text = choices[argue_idx]
+                is_deceptive = argue_target != correct_letter
+
+                new_input = prompts.suspect_user.format(
+                    question_block=question_block,
+                    argue_target=argue_target,
+                    argue_target_text=argue_target_text,
+                )
+
+                new_metadata: dict[str, object] = dict(base_metadata)
+                new_metadata["argue_target"] = argue_target
+                new_metadata["argue_target_text"] = argue_target_text
+                new_metadata["is_deceptive"] = is_deceptive
+
+                all_samples.append(
+                    Sample(
+                        input=new_input,
+                        target=correct_letter,
+                        metadata=new_metadata,
+                    )
+                )
+
+    return MemoryDataset(samples=all_samples, name="wmdp-multi-filtered")
+
+
 def add_debate_metadata(ds: MemoryDataset) -> MemoryDataset:
     """Add wrong_letter to each sample's metadata for debate tasks.
 

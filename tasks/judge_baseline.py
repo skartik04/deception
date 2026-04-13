@@ -25,6 +25,7 @@ from lib.wmdp_data import (
     balanced_expanded_dataset,
     format_question_block,
     load_root_dataset,
+    original_dataset_filtered,
 )
 from inspect_ai.dataset import Sample, MemoryDataset
 
@@ -75,14 +76,23 @@ def judge_baseline_yes_idk(
 
 
 @task
-def judge_baseline_no_idk() -> Task:
+def judge_baseline_no_idk(filter_files: str = "") -> Task:
     """Judge answers questions cold; IDK is not valid (scores 0). --model is the model under test.
 
     Use for raw capability measurement and judge selection.
+
+    Args:
+        filter_files: Comma-separated list of Kartik filter JSON stems. If set,
+            loads questions from those filter files instead of the full wmdp-bio root dataset.
     """
     prompts = JudgeBaselinePromptsNoIDK()
+    if filter_files:
+        files = [f.strip() for f in filter_files.split(",")]
+        dataset = original_dataset_filtered(files)
+    else:
+        dataset = load_root_dataset()
     return Task(
-        dataset=load_root_dataset(),
+        dataset=dataset,
         solver=[
             system_message(prompts.judge_system),
             generate(),
