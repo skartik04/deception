@@ -12,7 +12,6 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from inspect_ai import eval as inspect_eval
-from inspect_ai.model import GenerateConfig
 
 # Load .env before anything else
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
@@ -48,10 +47,13 @@ def run_filtering(role: str) -> None:
     print(f"Framings: {framings}  ({config.total_runs} attempts per question)")
     print()
 
-    log_paths: list[str] = []
+    safe_name = sanitize_model_name(model)
+    total_qualifying = 0
+    total_questions = 0
 
     for subset in config.dataset.subsets:
-        print(f"  Evaluating {subset} ({config.dataset.num_questions} questions x {config.total_runs} attempts) ...")
+        n = config.dataset.num_questions if config.dataset.num_questions > 0 else "all"
+        print(f"  Evaluating {subset} ({n} questions x {config.total_runs} attempts) ...")
 
         task = build_filter_task(
             subset=subset,
@@ -65,12 +67,15 @@ def run_filtering(role: str) -> None:
             model=model,
             epochs=1,
             log_dir=str(PROJECT_ROOT / "logs"),
-            generate_config=GenerateConfig(temperature=temperature, max_connections=50),
+            max_connections=1000,
+            max_samples=1000,
+            temperature=temperature,
         )
 
+        log_paths: list[str] = []
         for result in results:
             if result.location:
-                # Rename: {model_name}_{subset}_{num_questions}_{hash}.eval
+                # Rename: {date}_{model_short}_{subset}_{num_questions}_{hash}.eval
                 old_path = Path(result.location)
                 model_short = sanitize_model_name(model.split("/")[-1])
                 parts = old_path.stem.split("_")
@@ -82,27 +87,32 @@ def run_filtering(role: str) -> None:
                 log_paths.append(str(new_path))
                 print(f"  Log: {new_path}")
 
-    print(f"\nEval complete. Computing qualifying indices ...")
+        print(f"  Computing qualifying indices for {subset} ...")
 
-    config_snapshot = {
-        "dataset": {"subsets": config.dataset.subsets, "num_questions": config.dataset.num_questions},
-        "framings": framings,
-    }
+        config_snapshot = {
+            "dataset": {"subsets": [subset], "num_questions": config.dataset.num_questions},
+            "framings": framings,
+        }
 
-    qualifying = compute_qualifying(
-        log_paths=log_paths,
-        threshold=threshold,
-        role=role,
-        model=model,
-        config_snapshot=config_snapshot,
-    )
+        qualifying = compute_qualifying(
+            log_paths=log_paths,
+            threshold=threshold,
+            role=role,
+            model=model,
+            config_snapshot=config_snapshot,
+        )
 
-    safe_name = sanitize_model_name(model)
-    output_path = PROJECT_ROOT / "results" / f"{role}_{safe_name}.json"
-    save_results(qualifying, output_path)
+        output_path = PROJECT_ROOT / "results" / f"{role}_{safe_name}_{subset}_thresh{threshold}.json"
+        save_results(qualifying, output_path)
 
-    print(f"\nDone. {qualifying['stats']['qualifying_count']}/{qualifying['stats']['total_questions']} questions qualify.")
-    print(f"Per-framing accuracy: {qualifying['stats']['per_framing_accuracy']}")
+        q = qualifying["stats"]["qualifying_count"]
+        t = qualifying["stats"]["total_questions"]
+        total_qualifying += q
+        total_questions += t
+        print(f"  {subset}: {q}/{t} qualify | per-framing: {qualifying['stats']['per_framing_accuracy']}")
+        print()
+
+    print(f"Done. Total: {total_qualifying}/{total_questions} questions qualify across all subsets.")
 
 
 def main():
