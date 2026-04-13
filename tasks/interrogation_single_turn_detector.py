@@ -5,8 +5,11 @@ judge alongside the suspect's argument.
 
 Detectors:
   - oracle: ground-truth label (DECEPTIVE/HONEST)
+  - coin_flip: random baseline
   - behavioral: fresh-context belief probe
   - behavioral_hardened: adversarial variant (suspect forewarned about probing)
+  - llm_score: LLM reads the argument and outputs a deception probability
+  - llm_report: LLM reads the argument and outputs a qualitative explanation
 
 Compare with tasks/judge_baseline.py@judge_baseline_yes_idk to measure the delta.
 
@@ -31,6 +34,8 @@ from lib.detectors import (
     LieDetectorFn,
     OracleDetector,
     make_behavioral_detector,
+    make_llm_score_detector,
+    make_llm_report_detector,
 )
 from lib.prompts import (
     SUSPECT_PROMPTS,
@@ -91,6 +96,8 @@ def interrogation_single_turn_detector(
     suspect_model: str,
     suspect_prompt: str = "debate_coach",
     detector_name: str = "oracle",
+    detector_model: str = "",
+    filtering: str = "",
     balanced: bool = False,
     n_each: int = 50,
     one_each: bool = False,
@@ -104,7 +111,12 @@ def interrogation_single_turn_detector(
         suspect_model: Model that generates the argument (also probed by behavioral detector).
         suspect_prompt: Key into SUSPECT_PROMPTS. Use 'debate_coach_hardened' for
                         adversarial robustness testing.
-        detector_name: 'oracle' | 'coin_flip' | 'behavioral' | 'behavioral_hardened'.
+        detector_name: 'oracle' | 'coin_flip' | 'behavioral' | 'behavioral_hardened'
+                       | 'llm_score' | 'llm_report'.
+        detector_model: Model used by llm_score and llm_report detectors. Required when
+                        detector_name is 'llm_score' or 'llm_report'.
+        filtering: JSON filename stem in data/filterings/ (e.g. 'filtered_ids') produced
+                   by Kartik's filtering pipeline. If empty, all questions are used.
         balanced: If True, use equal honest/deceptive samples (n_each each).
         n_each: Number of honest and deceptive samples each when balanced=True (default 50).
         one_each: If True, use 1 honest + 1 deceptive per question across all questions.
@@ -128,6 +140,13 @@ def interrogation_single_turn_detector(
         )
 
     report_style = "answer" if answer_focused else "argument"
+
+    if detector_name in ("llm_score", "llm_report") and not detector_model:
+        raise ValueError(
+            f"detector_name='{detector_name}' requires detector_model to be set. "
+            "Pass -T detector_model=<model_name>."
+        )
+
     detectors: dict[str, LieDetectorFn] = {
         "oracle": OracleDetector(report_style=report_style),
         "coin_flip": CoinFlipDetector(report_style=report_style),
@@ -136,14 +155,24 @@ def interrogation_single_turn_detector(
             suspect_model,
             probe_system_prompt=SUSPECT_PROMPTS["debate_coach_hardened"],
         ),
+        "llm_score": make_llm_score_detector(detector_model, report_style=report_style),
+        "llm_report": make_llm_report_detector(detector_model),
     }
     if detector_name not in detectors:
         raise ValueError(
             f"Unknown detector '{detector_name}'. Choose from: {list(detectors)}"
         )
 
+    filtering_arg = filtering if filtering else None
+    if one_each:
+        dataset = one_each_dataset(filtering=filtering_arg)
+    elif balanced:
+        dataset = balanced_expanded_dataset(n_each=n_each, filtering=filtering_arg)
+    else:
+        dataset = expanded_dataset(filtering=filtering_arg)
+
     return Task(
-        dataset=one_each_dataset() if one_each else (balanced_expanded_dataset(n_each=n_each) if balanced else expanded_dataset()),
+        dataset=dataset,
         solver=interrogation_detector_solver(
             suspect_model_name=suspect_model,
             suspect_system=SUSPECT_PROMPTS[suspect_prompt],
