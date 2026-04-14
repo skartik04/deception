@@ -43,7 +43,7 @@ from lib.prompts import (
     InterrogationDetectorPromptsAnswerFocused,
     InterrogationDetectorPromptsNoIDK,
 )
-from lib.wmdp_data import answer_scorer, balanced_expanded_dataset, expanded_dataset, format_question_block, one_each_dataset
+from lib.wmdp_data import answer_scorer, balanced_expanded_dataset, expanded_dataset, expanded_dataset_filtered, format_question_block, one_each_dataset
 
 
 @solver
@@ -104,6 +104,7 @@ def interrogation_single_turn_detector(
     temperature: float = 0.0,
     allow_idk: bool = True,
     answer_focused: bool = False,
+    filter_files: str = "",
 ) -> Task:
     """Interrogation with lie detector reports shown to judge. --model is the judge.
 
@@ -125,6 +126,11 @@ def interrogation_single_turn_detector(
         answer_focused: If True, the detector report is framed as being about the argued
             answer rather than the argument, and IDK is disallowed. Prevents the judge
             from reasoning 'the argument is deceptive but the answer might still be right'.
+        filter_files: Comma-separated list of Kartik filter JSON stems
+            (from kartik_deception/results/), e.g.
+            "judge_..._wmdp-bio_thresh3,judge_..._wmdp-chem_thresh3".
+            If set, loads questions from HuggingFace using these filter files
+            instead of the default liars-bench wmdp-bio dataset.
     """
     if answer_focused:
         prompts: InterrogationDetectorPrompts = InterrogationDetectorPromptsAnswerFocused()
@@ -163,8 +169,18 @@ def interrogation_single_turn_detector(
             f"Unknown detector '{detector_name}'. Choose from: {list(detectors)}"
         )
 
+    if filter_files and filtering:
+        raise ValueError(
+            "Use either 'filter_files' or 'filtering', not both. "
+            "'filter_files' is for one-or-more per-subset Kartik filter JSONs; "
+            "'filtering' is for the wmdp-bio root dataset filtering path."
+        )
+
     filtering_arg = filtering if filtering else None
-    if one_each:
+    if filter_files:
+        files = [f.strip() for f in filter_files.split(",")]
+        dataset = expanded_dataset_filtered(files)
+    elif one_each:
         dataset = one_each_dataset(filtering=filtering_arg)
     elif balanced:
         dataset = balanced_expanded_dataset(n_each=n_each, filtering=filtering_arg)
