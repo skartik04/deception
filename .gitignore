@@ -1,27 +1,40 @@
 # Python-generated files
 __pycache__/
 *.py[oc]
+*.pyc
 build/
 dist/
 wheels/
-*.egg-info
+*.egg-info/
 
 # Virtual environments
 .venv
+.venv/
 
 # Secrets
 .env
 
 # Inspect logs
 logs/
+logs_new/
+final_log/
+*.eval
 
 # OS
 .DS_Store
 
-
 # notes
 notes/
 
-
 # debate traces
 results/debate_traces/
+
+# notebooks
+notebooks/
+
+# personal docs
+TODO.md
+SESSION.md
+EXPERIMENTS.md
+CLAUDE.local.md
+HANDOVER.md
