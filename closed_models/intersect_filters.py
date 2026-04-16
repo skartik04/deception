@@ -6,7 +6,7 @@ Finds questions where:
 
 Reads the per-subset JSONs produced by run_filter.py and writes one
 intersected JSON per subset into results/. The output format matches what
-gergely_deception's expanded_dataset_filtered() expects.
+expanded_dataset_filtered() expects.
 
 Usage:
     uv run python -m closed_models.intersect_filters [--dry-run]
@@ -107,6 +107,11 @@ def intersect_filters(dry_run: bool = False) -> None:
         out_path = PROJECT_ROOT / "results" / out_name
         out_path.write_text(json.dumps(out, indent=2))
         print(f"  Written: {out_path}")
+
+        # Also write the canonical file that run_interrogation_suite.py reads
+        usable_path = PROJECT_ROOT / "data" / "filterings" / f"usable_ids_{subset}.json"
+        usable_path.write_text(json.dumps(out, indent=2))
+        print(f"  Updated: {usable_path}")
         print()
 
     print(f"Total: {total_intersect} intersected questions "

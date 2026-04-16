@@ -43,11 +43,7 @@ RUN_CONDITIONS: dict[str, bool] = {
 SUSPECT_MODEL = "openrouter/meta-llama/llama-3.3-70b-instruct:nitro"
 JUDGE_MODEL = "openrouter/google/gemma-3-27b-it:nitro"
 DETECTOR_MODEL = "openrouter/google/gemma-3-27b-it:nitro"
-FILTER_FILES = [
-    "usable_ids_wmdp-bio",
-    "usable_ids_wmdp-chem",
-    "usable_ids_wmdp-cyber",
-]
+FILTER_FILES = [f.stem for f in sorted(FILTERINGS_DIR.glob("usable_ids_wmdp-*.json"))]
 SUSPECT_PROMPT = "debate_coach"
 JUDGE_PROMPT = "informed"
 TEMPERATURE = 0.0

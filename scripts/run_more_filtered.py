@@ -14,7 +14,7 @@ Usage:
     uv run python scripts/run_more_filtered.py [--dry-run]
 
 Requires:
-    kartik_deception/results/intersect_*_{subset}.json for each subset.
+    data/filterings/usable_ids_wmdp-{subset}.json for each subset.
 """
 
 import argparse
@@ -23,13 +23,13 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).resolve().parent.parent.parent / "kartik_deception" / ".env")
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 from inspect_ai import eval as inspect_eval
 from inspect_ai.model import GenerateConfig
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-KARTIK_RESULTS = PROJECT_ROOT.parent / "kartik_deception" / "results"
+FILTERINGS_DIR = PROJECT_ROOT / "data" / "filterings"
 LOG_DIR = PROJECT_ROOT / "logs" / "more_filtered_04_08"
 
 SUSPECT_MODEL = "openrouter/meta-llama/llama-3.3-70b-instruct:nitro"
@@ -44,12 +44,12 @@ from tasks.judge_baseline import judge_baseline_no_idk
 
 
 def find_intersect_files() -> list[str]:
-    """Find all intersect JSON stems in kartik results dir."""
-    files = sorted(KARTIK_RESULTS.glob("intersect_*_wmdp-*.json"))
+    """Find all usable_ids JSON stems in data/filterings/."""
+    files = sorted(FILTERINGS_DIR.glob("usable_ids_wmdp-*.json"))
     if not files:
         raise FileNotFoundError(
-            f"No intersect_*.json files found in {KARTIK_RESULTS}. "
-            "Run kartik_deception/closed_models/intersect_filters.py first."
+            f"No usable_ids_*.json files found in {FILTERINGS_DIR}. "
+            "Run closed_models/intersect_filters.py first."
         )
     return [f.stem for f in files]
 

@@ -129,7 +129,7 @@ def interrogation_single_turn_detector(
             answer rather than the argument, and IDK is disallowed. Prevents the judge
             from reasoning 'the argument is deceptive but the answer might still be right'.
         filter_files: Comma-separated list of Kartik filter JSON stems
-            (from kartik_deception/results/), e.g.
+            (from results/), e.g.
             "judge_..._wmdp-bio_thresh3,judge_..._wmdp-chem_thresh3".
             If set, loads questions from HuggingFace using these filter files
             instead of the default liars-bench wmdp-bio dataset.

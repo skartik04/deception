@@ -36,14 +36,7 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 # Each CSV contains per-question model_belief values for one model.
 LIARS_BENCH_DIR = DATA_DIR / "liars-bench"
 
-# Pre-computed filtering results from Kartik's filtering pipeline.
-# Prefer the vendored copies tracked in this repo; fall back to the sibling
-# kartik_deception/results directory for compatibility with earlier setups.
-IN_REPO_FILTERINGS_DIR = DATA_DIR / "filterings"
-SIBLING_FILTERINGS_DIR = (
-    Path(__file__).parent.parent.parent / "kartik_deception" / "results"
-)
-FILTERINGS_DIRS = [IN_REPO_FILTERINGS_DIR, SIBLING_FILTERINGS_DIR]
+FILTERINGS_DIR = DATA_DIR / "filterings"
 
 
 def _filter_filename(name: str) -> str:
@@ -52,25 +45,19 @@ def _filter_filename(name: str) -> str:
 
 def _resolve_filtering_path(name: str) -> Path:
     filename = _filter_filename(name)
-    for directory in FILTERINGS_DIRS:
-        path = directory / filename
-        if path.exists():
-            return path
+    path = FILTERINGS_DIR / filename
+    if path.exists():
+        return path
 
-    available: dict[str, list[str]] = {
-        str(directory): sorted(f.stem for f in directory.glob("*.json"))
-        for directory in FILTERINGS_DIRS
-        if directory.exists()
-    }
-    searched = [str(directory / filename) for directory in FILTERINGS_DIRS]
+    available = sorted(f.stem for f in FILTERINGS_DIR.glob("*.json")) if FILTERINGS_DIR.exists() else []
     raise FileNotFoundError(
-        f"No filtering file found for '{name}'. Searched: {searched}. "
-        f"Available by directory: {available}"
+        f"No filtering file found for '{name}'. Searched: {path}. "
+        f"Available: {available}"
     )
 
 
 def load_filtered_ids(name: str) -> list[int]:
-    """Load a filtered_ids list from a vendored or sibling filtering JSON.
+    """Load a filtered_ids list from data/filterings/.
 
     Args:
         name: Filename stem (e.g. "filtered_questions") or full filename
@@ -585,7 +572,7 @@ def expanded_dataset_filtered(
 ) -> MemoryDataset:
     """Load WMDP questions from one or more subsets via Kartik's filter JSONs.
 
-    Each filter JSON (from kartik_deception/results/) covers one WMDP subset
+    Each filter JSON (from results/) covers one WMDP subset
     (bio/chem/cyber) and records which question indices the judge failed on.
     Questions are loaded from HuggingFace and expanded to 4 argue_target
     samples per question (A-D), just like expanded_dataset().
