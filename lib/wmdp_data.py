@@ -37,13 +37,40 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 LIARS_BENCH_DIR = DATA_DIR / "liars-bench"
 
 # Pre-computed filtering results from Kartik's filtering pipeline.
-# Lives at ~/kartik_deception/results/ (sibling repo — see HANDOVER.md).
-# Each JSON contains filtered_ids: question indices where suspect knows / judge doesn't.
-FILTERINGS_DIR = Path(__file__).parent.parent.parent / "kartik_deception" / "results"
+# Prefer the vendored copies tracked in this repo; fall back to the sibling
+# kartik_deception/results directory for compatibility with earlier setups.
+IN_REPO_FILTERINGS_DIR = DATA_DIR / "filterings"
+SIBLING_FILTERINGS_DIR = (
+    Path(__file__).parent.parent.parent / "kartik_deception" / "results"
+)
+FILTERINGS_DIRS = [IN_REPO_FILTERINGS_DIR, SIBLING_FILTERINGS_DIR]
+
+
+def _filter_filename(name: str) -> str:
+    return name if name.endswith(".json") else f"{name}.json"
+
+
+def _resolve_filtering_path(name: str) -> Path:
+    filename = _filter_filename(name)
+    for directory in FILTERINGS_DIRS:
+        path = directory / filename
+        if path.exists():
+            return path
+
+    available: dict[str, list[str]] = {
+        str(directory): sorted(f.stem for f in directory.glob("*.json"))
+        for directory in FILTERINGS_DIRS
+        if directory.exists()
+    }
+    searched = [str(directory / filename) for directory in FILTERINGS_DIRS]
+    raise FileNotFoundError(
+        f"No filtering file found for '{name}'. Searched: {searched}. "
+        f"Available by directory: {available}"
+    )
 
 
 def load_filtered_ids(name: str) -> list[int]:
-    """Load a filtered_ids list from a JSON file in data/filterings/.
+    """Load a filtered_ids list from a vendored or sibling filtering JSON.
 
     Args:
         name: Filename stem (e.g. "filtered_questions") or full filename
@@ -53,12 +80,7 @@ def load_filtered_ids(name: str) -> list[int]:
         List of integer question indices (row positions in the 1273-question
         WMDP-bio dataset, same as HuggingFace cais/wmdp wmdp-bio row indices).
     """
-    path = FILTERINGS_DIR / (name if name.endswith(".json") else f"{name}.json")
-    if not path.exists():
-        available = [f.stem for f in FILTERINGS_DIR.glob("*.json")]
-        raise FileNotFoundError(
-            f"No filtering file at {path}. Available: {available}"
-        )
+    path = _resolve_filtering_path(name)
     data: object = json.loads(path.read_text())
     if isinstance(data, list):
         return data  # type: ignore[return-value]
@@ -502,12 +524,7 @@ def one_each_dataset(
 
 def _load_filter_json(name: str) -> dict:
     """Load a Kartik filter JSON by filename stem."""
-    path = FILTERINGS_DIR / (name if name.endswith(".json") else f"{name}.json")
-    if not path.exists():
-        available = [f.stem for f in FILTERINGS_DIR.glob("*.json")]
-        raise FileNotFoundError(
-            f"No filter file at {path}. Available: {available}"
-        )
+    path = _resolve_filtering_path(name)
     return json.loads(path.read_text())
 
 

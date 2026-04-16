@@ -5,6 +5,7 @@ judge alongside the suspect's argument.
 
 Detectors:
   - oracle: ground-truth label (DECEPTIVE/HONEST)
+  - always_50: constant 50% deception baseline
   - coin_flip: random baseline
   - behavioral: fresh-context belief probe
   - behavioral_hardened: adversarial variant (suspect forewarned about probing)
@@ -30,6 +31,7 @@ from inspect_ai.model import (
 from inspect_ai.solver import Generate, Solver, TaskState, solver
 
 from lib.detectors import (
+    Always50Detector,
     CoinFlipDetector,
     LieDetectorFn,
     OracleDetector,
@@ -102,7 +104,7 @@ def interrogation_single_turn_detector(
     n_each: int = 50,
     one_each: bool = False,
     temperature: float = 0.0,
-    allow_idk: bool = True,
+    allow_idk: bool = False,
     answer_focused: bool = False,
     filter_files: str = "",
 ) -> Task:
@@ -112,7 +114,7 @@ def interrogation_single_turn_detector(
         suspect_model: Model that generates the argument (also probed by behavioral detector).
         suspect_prompt: Key into SUSPECT_PROMPTS. Use 'debate_coach_hardened' for
                         adversarial robustness testing.
-        detector_name: 'oracle' | 'coin_flip' | 'behavioral' | 'behavioral_hardened'
+        detector_name: 'oracle' | 'always_50' | 'coin_flip' | 'behavioral' | 'behavioral_hardened'
                        | 'llm_score' | 'llm_report'.
         detector_model: Model used by llm_score and llm_report detectors. Required when
                         detector_name is 'llm_score' or 'llm_report'.
@@ -122,7 +124,7 @@ def interrogation_single_turn_detector(
         n_each: Number of honest and deceptive samples each when balanced=True (default 50).
         one_each: If True, use 1 honest + 1 deceptive per question across all questions.
         temperature: Sampling temperature for both suspect and judge (default 0.0).
-        allow_idk: If False, IDK is removed from the judge's answer choices (default True).
+        allow_idk: If False, IDK is removed from the judge's answer choices (default False).
         answer_focused: If True, the detector report is framed as being about the argued
             answer rather than the argument, and IDK is disallowed. Prevents the judge
             from reasoning 'the argument is deceptive but the answer might still be right'.
@@ -153,21 +155,37 @@ def interrogation_single_turn_detector(
             "Pass -T detector_model=<model_name>."
         )
 
-    detectors: dict[str, LieDetectorFn] = {
-        "oracle": OracleDetector(report_style=report_style),
-        "coin_flip": CoinFlipDetector(report_style=report_style),
-        "behavioral": make_behavioral_detector(suspect_model),
-        "behavioral_hardened": make_behavioral_detector(
+    detector_names = [
+        "oracle",
+        "always_50",
+        "coin_flip",
+        "behavioral",
+        "behavioral_hardened",
+        "llm_score",
+        "llm_report",
+    ]
+    if detector_name not in detector_names:
+        raise ValueError(
+            f"Unknown detector '{detector_name}'. Choose from: {detector_names}"
+        )
+
+    if detector_name == "oracle":
+        detector: LieDetectorFn = OracleDetector(report_style=report_style)
+    elif detector_name == "always_50":
+        detector = Always50Detector(report_style=report_style)
+    elif detector_name == "coin_flip":
+        detector = CoinFlipDetector(report_style=report_style)
+    elif detector_name == "behavioral":
+        detector = make_behavioral_detector(suspect_model)
+    elif detector_name == "behavioral_hardened":
+        detector = make_behavioral_detector(
             suspect_model,
             probe_system_prompt=SUSPECT_PROMPTS["debate_coach_hardened"],
-        ),
-        "llm_score": make_llm_score_detector(detector_model, report_style=report_style),
-        "llm_report": make_llm_report_detector(detector_model),
-    }
-    if detector_name not in detectors:
-        raise ValueError(
-            f"Unknown detector '{detector_name}'. Choose from: {list(detectors)}"
         )
+    elif detector_name == "llm_score":
+        detector = make_llm_score_detector(detector_model, report_style=report_style)
+    else:
+        detector = make_llm_report_detector(detector_model)
 
     if filter_files and filtering:
         raise ValueError(
@@ -192,7 +210,7 @@ def interrogation_single_turn_detector(
         solver=interrogation_detector_solver(
             suspect_model_name=suspect_model,
             suspect_system=SUSPECT_PROMPTS[suspect_prompt],
-            detector=detectors[detector_name],
+            detector=detector,
             prompts=prompts,
             temperature=temperature,
         ),

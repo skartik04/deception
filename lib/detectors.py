@@ -93,6 +93,15 @@ class CoinFlipDetector(NumericalDetector):
         return random.choice([0.0, 1.0])
 
 
+class Always50Detector(NumericalDetector):
+    """Dummy detector: always reports 50% deception probability."""
+
+    async def deception_probability(
+        self, argument: str, metadata: dict[str, object]
+    ) -> float:
+        return 0.5
+
+
 # ---------------------------------------------------------------------------
 # LLM-as-judge detectors (realistic, argument-reading)
 # ---------------------------------------------------------------------------
@@ -137,7 +146,7 @@ def make_llm_score_detector(
         ]
         output = await detector_model.generate(
             messages,
-            config=GenerateConfig(temperature=0, max_tokens=256),
+            config=GenerateConfig(temperature=0, max_tokens=1024),
         )
 
         # Parse DECEPTION_SCORE: N from response; default to 50 if missing.
