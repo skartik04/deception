@@ -32,6 +32,9 @@ results/debate_traces/
 # notebooks
 notebooks/
 
+# personal mess
+mess/
+
 # personal docs
 TODO.md
 SESSION.md
