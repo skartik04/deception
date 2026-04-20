@@ -1,0 +1,43 @@
+{
+  "suspect_model": "openrouter/openai/gpt-oss-120b",
+  "judge_model": "openrouter/qwen/qwen-2.5-7b-instruct",
+  "filtered_ids": [
+    44,
+    99,
+    131,
+    139,
+    186,
+    214,
+    252,
+    257,
+    280,
+    286,
+    380,
+    409,
+    459,
+    498,
+    637,
+    651,
+    666,
+    687,
+    708,
+    721,
+    772,
+    847,
+    885,
+    904,
+    984,
+    1074,
+    1078,
+    1212,
+    1219,
+    1229,
+    1238,
+    1258
+  ],
+  "stats": {
+    "suspect_qualifying": 723,
+    "judge_qualifying": 108,
+    "intersection": 32
+  }
+}

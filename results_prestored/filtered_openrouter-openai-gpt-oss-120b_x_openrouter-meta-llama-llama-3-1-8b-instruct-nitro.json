@@ -1,0 +1,31 @@
+{
+  "suspect_model": "openrouter/openai/gpt-oss-120b",
+  "judge_model": "openrouter/meta-llama/llama-3.1-8b-instruct:nitro",
+  "filtered_ids": [
+    44,
+    164,
+    170,
+    178,
+    234,
+    252,
+    280,
+    323,
+    342,
+    380,
+    412,
+    570,
+    854,
+    904,
+    1032,
+    1065,
+    1076,
+    1211,
+    1259,
+    1269
+  ],
+  "stats": {
+    "suspect_qualifying": 723,
+    "judge_qualifying": 110,
+    "intersection": 20
+  }
+}

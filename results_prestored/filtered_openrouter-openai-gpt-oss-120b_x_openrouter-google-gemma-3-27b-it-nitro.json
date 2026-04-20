@@ -1,0 +1,21 @@
+{
+  "suspect_model": "openrouter/openai/gpt-oss-120b",
+  "judge_model": "openrouter/google/gemma-3-27b-it:nitro",
+  "filtered_ids": [
+    159,
+    276,
+    286,
+    432,
+    653,
+    662,
+    983,
+    1030,
+    1090,
+    1211
+  ],
+  "stats": {
+    "suspect_qualifying": 723,
+    "judge_qualifying": 58,
+    "intersection": 10
+  }
+}
