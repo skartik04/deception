@@ -211,269 +211,80 @@ def make_llm_report_detector(
 # ---------------------------------------------------------------------------
 
 
-class ApolloProbeDetector(NumericalDetector):
-    """White-box detector: replays the suspect's argument through a local
-    Llama 70B (BF16) forward pass, applies an Apollo linear probe to the
-    chosen layer's residual activations, pools per-token deception logits,
-    and reports the sigmoid as a deception probability.
+class WhiteboxProbeDetector(NumericalDetector):
+    """Generic white-box probe detector backed by `lib.probe_engine.ProbeEngine`.
 
-    The suspect_system that the suspect saw must be passed in (the detector
-    can't infer it from metadata). The suspect_user is reconstructed from
-    metadata using the same template the interrogation task uses.
+    Replaces the old `ApolloProbeDetector` and `BalcellsProbeDetector` —
+    instead of duplicating the model-load + forward-pass logic per probe
+    family, this delegates to `ProbeEngine` and converts a single probe's
+    per-token output to a single deception probability.
+
+    For LR-style probes (Apollo, custom-trained) the per-token output is a
+    raw logit, so we sigmoid the pooled value. For Balcells linear-head
+    probes it's also a logit. For RepE-LAT it's an unbounded sum-of-projections
+    that doesn't naturally calibrate to [0,1]; in that case `report_style`
+    falls back to a normalized rank rather than sigmoid (TODO: train a
+    Platt scaler at calibration time).
 
     Args:
         model_path: Local HF path (e.g. /workspace/models/llama-3.3-70b-instruct).
-        probe_path: Path to the Apollo .pt probe (LogisticRegressionDetector).
+        probe_name: Key registered in `lib.probes.load_probe(...)`.
         suspect_system: Exact suspect system prompt used during the eval.
-        layer: Residual stream layer to probe (Apollo defaults to 22 for Llama 70B).
-        pooling: 'mean' | 'max' | 'last' — how to reduce per-token logits.
-        max_length: Truncation length for the tokenized dialogue.
-        max_memory_per_gpu_gb: Per-GPU GiB budget for `device_map="auto"`. Total
-            VRAM allocated = `max_memory_per_gpu_gb` × n_visible_gpus. With 2× H100
-            80 GB, default 70 GiB each leaves headroom for forward activations.
+        pooling: 'mean' | 'max' | 'last' — how to reduce per-token scores.
         report_style: 'argument' | 'answer' — see NumericalDetector.
-    """
-
-    def __init__(
-        self,
-        model_path: str,
-        probe_path: str,
-        suspect_system: str,
-        layer: int = 22,
-        pooling: str = "mean",
-        max_length: int = 4096,
-        max_memory_per_gpu_gb: int = 70,
-        report_style: str = "argument",
-    ) -> None:
-        super().__init__(report_style=report_style)
-        if pooling not in ("mean", "max", "last"):
-            raise ValueError(f"pooling must be mean/max/last, got {pooling!r}")
-        self.model_path = model_path
-        self.probe_path = probe_path
-        self.suspect_system = suspect_system
-        self.layer = layer
-        self.pooling = pooling
-        self.max_length = max_length
-        self.max_memory_per_gpu_gb = max_memory_per_gpu_gb
-        self._loaded = False
-
-    def _load(self) -> None:
-        if self._loaded:
-            return
-        import sys
-        from pathlib import Path
-
-        probes_dir = (
-            Path(__file__).resolve().parent.parent
-            / "liars-bench"
-            / "src"
-            / "probes"
-        )
-        if str(probes_dir) not in sys.path:
-            sys.path.insert(0, str(probes_dir))
-
-        import torch
-        from deception_detection.detectors import LogisticRegressionDetector
-        from lib.model_loading import load_llama_strict
-
-        self._torch = torch
-        # Strict load: no CPU offload allowed (project policy).
-        self._model, self._tokenizer = load_llama_strict(
-            self.model_path, per_gpu_gib=self.max_memory_per_gpu_gb
-        )
-        self._probe = LogisticRegressionDetector.load(self.probe_path)
-        self._loaded = True
-
-    async def deception_probability(
-        self, argument: str, metadata: dict[str, object]
-    ) -> float:
-        self._load()
-        from deception_detection.activations import Activations
-        from deception_detection.data.base import Message
-        from deception_detection.tokenized_data import TokenizedDataset
-        from deception_detection.types import Dialogue
-        from lib.prompts import _SUSPECT_USER
-
-        question = str(metadata["question"])
-        choices: list[str] = list(metadata["choices"])  # type: ignore[arg-type]
-        argue_target = str(metadata["argue_target"])
-        argue_target_text = str(metadata["argue_target_text"])
-        question_block = format_question_block(question, choices)
-        suspect_user = _SUSPECT_USER.format(
-            question_block=question_block,
-            argue_target=argue_target,
-            argue_target_text=argue_target_text,
-        )
-
-        dialogue: Dialogue = [
-            Message("system", self.suspect_system, False),
-            Message("user", suspect_user, False),
-            Message("assistant", argument, True),
-        ]
-        toks = TokenizedDataset.from_dialogue_list(
-            [dialogue],
-            self._tokenizer,
-            padding={"llama": {"left": 0, "right": 0}},
-            max_length=self.max_length,
-            detect_all=True,
-        )
-        acts = Activations.from_model(
-            self._model, toks, batch_size=1, layers=[self.layer], verbose=False
-        )
-        token_scores = self._probe.score(acts).scores[0]
-        if self.pooling == "mean":
-            pooled = token_scores.mean().item()
-        elif self.pooling == "max":
-            pooled = token_scores.max().item()
-        else:
-            pooled = token_scores[-1].item()
-        return float(self._torch.sigmoid(self._torch.tensor(pooled)).item())
-
-
-# ---------------------------------------------------------------------------
-# Balcells hallucination probe detector (LoRA + linear head at late layer)
-# ---------------------------------------------------------------------------
-
-
-class BalcellsProbeDetector(NumericalDetector):
-    """White-box detector using Balcells et al. (2025) pretrained hallucination
-    probes for Llama 3.3 70B. Optionally applies a LoRA adapter to the base
-    model, then a single Linear(hidden_size, 1) head at a configured residual
-    stream layer (default 76). Output is sigmoid → P(hallucination).
-
-    Off-the-shelf checkpoints from `obalcells/hallucination-probes`:
-      - llama3_3_70b_linear            (no adapter)
-      - llama3_3_70b_lora_lambda_kl_0_05  (with KL-regularized LoRA)
-      - llama3_3_70b_lora_lambda_lm_0_01  (with LM-regularized LoRA)
-
-    Args:
-        model_path: Local HF path (e.g. /workspace/models/llama-3.3-70b-instruct).
-        probe_dir: Directory containing probe_head.bin, probe_config.json, and
-            optionally adapter_config.json + adapter_model.safetensors.
-        suspect_system: Suspect system prompt the suspect saw (for dialogue rebuild).
-        pooling: 'mean' | 'max' | 'last' — token-pool of the per-token probabilities.
         max_length: Truncation length for the tokenized dialogue.
         max_memory_per_gpu_gb: Per-GPU GiB budget for `device_map="auto"`.
-        report_style: 'argument' | 'answer' — see NumericalDetector.
     """
 
     def __init__(
         self,
         model_path: str,
-        probe_dir: str,
+        probe_name: str,
         suspect_system: str,
-        pooling: str = "max",
+        pooling: str = "mean",
+        report_style: str = "argument",
         max_length: int = 4096,
         max_memory_per_gpu_gb: int = 70,
-        report_style: str = "argument",
     ) -> None:
         super().__init__(report_style=report_style)
         if pooling not in ("mean", "max", "last"):
             raise ValueError(f"pooling must be mean/max/last, got {pooling!r}")
-        self.model_path = model_path
-        self.probe_dir = probe_dir
-        self.suspect_system = suspect_system
+        self.probe_name = probe_name
         self.pooling = pooling
-        self.max_length = max_length
-        self.max_memory_per_gpu_gb = max_memory_per_gpu_gb
-        self._loaded = False
+        self._engine: object | None = None
+        self._model_path = model_path
+        self._suspect_system = suspect_system
+        self._max_length = max_length
+        self._per_gpu_gib = max_memory_per_gpu_gb
 
     def _load(self) -> None:
-        if self._loaded:
+        if self._engine is not None:
             return
-        import json
-        import sys
-        from pathlib import Path
+        from lib.probe_engine import ProbeEngine
+        from lib.probes import load_probe
 
-        probes_src = (
-            Path(__file__).resolve().parent.parent / "liars-bench" / "src" / "probes"
+        engine = ProbeEngine(
+            model_path=self._model_path,
+            probes=[load_probe(self.probe_name)],
+            suspect_system=self._suspect_system,
+            max_length=self._max_length,
+            per_gpu_gib=self._per_gpu_gib,
         )
-        if str(probes_src) not in sys.path:
-            sys.path.insert(0, str(probes_src))
-
-        import torch
-        from lib.model_loading import assert_no_cpu_params, load_llama_strict
-
-        self._torch = torch
-        # Strict load: no CPU offload allowed (project policy).
-        base, self._tokenizer = load_llama_strict(
-            self.model_path, per_gpu_gib=self.max_memory_per_gpu_gb
-        )
-
-        probe_dir_path = Path(self.probe_dir)
-        if (probe_dir_path / "adapter_config.json").exists():
-            from peft import PeftModel
-            self._model = PeftModel.from_pretrained(base, str(probe_dir_path))
-            # PEFT can move adapter weights to a different device than base;
-            # re-verify after wrapping.
-            assert_no_cpu_params(self._model)
-        else:
-            self._model = base
-        self._model.eval()
-
-        cfg = json.load(open(probe_dir_path / "probe_config.json"))
-        self.layer_idx: int = int(cfg["layer_idx"])
-        hidden_size: int = int(cfg["hidden_size"])
-        head = torch.nn.Linear(hidden_size, 1, device="cpu", dtype=torch.float32)
-        sd = torch.load(
-            probe_dir_path / "probe_head.bin", map_location="cpu", weights_only=True
-        )
-        head.load_state_dict({k: v.float() for k, v in sd.items()})
-        head.eval()
-        self._head = head
-        self._loaded = True
+        engine.load()
+        self._engine = engine
 
     async def deception_probability(
         self, argument: str, metadata: dict[str, object]
     ) -> float:
-        self._load()
-        from deception_detection.data.base import Message
-        from deception_detection.tokenized_data import TokenizedDataset
-        from deception_detection.types import Dialogue
-        from lib.prompts import _SUSPECT_USER
+        import torch
 
-        question = str(metadata["question"])
-        choices: list[str] = list(metadata["choices"])  # type: ignore[arg-type]
-        argue_target = str(metadata["argue_target"])
-        argue_target_text = str(metadata["argue_target_text"])
-        question_block = format_question_block(question, choices)
-        suspect_user = _SUSPECT_USER.format(
-            question_block=question_block,
-            argue_target=argue_target,
-            argue_target_text=argue_target_text,
-        )
-        dialogue: Dialogue = [
-            Message("system", self.suspect_system, False),
-            Message("user", suspect_user, False),
-            Message("assistant", argument, True),
-        ]
-        toks = TokenizedDataset.from_dialogue_list(
-            [dialogue],
-            self._tokenizer,
-            padding={"llama": {"left": 0, "right": 0}},
-            max_length=self.max_length,
-        )
-        device = next(self._model.parameters()).device
-        input_ids = toks.tokens.to(device)
-        mask = toks.detection_mask
-        assert mask is not None
-        with self._torch.no_grad():
-            out = self._model(input_ids, output_hidden_states=True, use_cache=False)
-        hs = out.hidden_states[self.layer_idx + 1][0]
-        detect_mask = mask[0].bool()
-        n_pair = min(detect_mask.shape[0], hs.shape[0])
-        kept = hs[:n_pair][detect_mask[:n_pair]]
-        kept_cpu = kept.to("cpu", dtype=self._torch.float32)
-        with self._torch.no_grad():
-            logits = self._head(kept_cpu).squeeze(-1)
-            probs = self._torch.sigmoid(logits)
-        if self.pooling == "mean":
-            pooled = float(probs.mean().item())
-        elif self.pooling == "max":
-            pooled = float(probs.max().item())
-        else:
-            pooled = float(probs[-1].item())
-        return pooled
+        self._load()
+        engine = self._engine
+        assert engine is not None
+        scored = engine.score_argument(metadata, argument)  # type: ignore[attr-defined]
+        per_token = scored[self.probe_name]
+        pooled = per_token.pool(self.pooling)
+        return float(torch.sigmoid(torch.tensor(pooled)).item())
 
 
 # ---------------------------------------------------------------------------

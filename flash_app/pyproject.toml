@@ -3,9 +3,8 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "flash_apollo"
+name = "flash-app"
 version = "0.1.0"
-description = "Runpod Flash Serverless Application"
-readme = "README.md"
+description = "Flash deployment of ProbeEngine for Llama 3.3 70B probe scoring"
 requires-python = ">=3.11,<3.13"
 dependencies = ["runpod-flash"]

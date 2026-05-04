@@ -32,14 +32,13 @@ from inspect_ai.solver import Generate, Solver, TaskState, solver
 
 from lib.detectors import (
     Always50Detector,
-    ApolloProbeDetector,
-    BalcellsProbeDetector,
     CoinFlipDetector,
     LieDetectorFn,
     OracleDetector,
+    WhiteboxProbeDetector,
     make_behavioral_detector,
-    make_llm_score_detector,
     make_llm_report_detector,
+    make_llm_score_detector,
 )
 from lib.prompts import (
     SUSPECT_PROMPTS,
@@ -109,11 +108,8 @@ def interrogation_single_turn_detector(
     allow_idk: bool = False,
     answer_focused: bool = False,
     filter_files: str = "",
-    probe_path: str = "",
     probe_model_path: str = "/workspace/models/llama-3.3-70b-instruct",
-    probe_layer: int = 22,
     probe_pooling: str = "mean",
-    balcells_probe_dir: str = "",
 ) -> Task:
     """Interrogation with lie detector reports shown to judge. --model is the judge.
 
@@ -121,8 +117,13 @@ def interrogation_single_turn_detector(
         suspect_model: Model that generates the argument (also probed by behavioral detector).
         suspect_prompt: Key into SUSPECT_PROMPTS. Use 'debate_coach_hardened' for
                         adversarial robustness testing.
-        detector_name: 'oracle' | 'always_50' | 'coin_flip' | 'behavioral' | 'behavioral_hardened'
-                       | 'llm_score' | 'llm_report'.
+        detector_name: One of the built-in dynamic detectors
+                       ('oracle' | 'always_50' | 'coin_flip' | 'behavioral'
+                        | 'behavioral_hardened' | 'llm_score' | 'llm_report')
+                       OR any white-box probe name registered in
+                       `lib.probes.load_probe(...)` (e.g. 'apollo_roleplaying',
+                       'balcells_linear', 'balcells_lora_kl', 'repe_lat',
+                       'wmdp_full_arg', 'wmdp_answer_only', 'geometry_of_truth').
         detector_model: Model used by llm_score and llm_report detectors. Required when
                         detector_name is 'llm_score' or 'llm_report'.
         filtering: JSON filename stem in data/filterings/ (e.g. 'filtered_ids') produced
@@ -162,7 +163,7 @@ def interrogation_single_turn_detector(
             "Pass -T detector_model=<model_name>."
         )
 
-    detector_names = [
+    builtin_detectors = {
         "oracle",
         "always_50",
         "coin_flip",
@@ -170,54 +171,32 @@ def interrogation_single_turn_detector(
         "behavioral_hardened",
         "llm_score",
         "llm_report",
-        "apollo_probe",
-        "balcells_probe",
-    ]
-    if detector_name not in detector_names:
-        raise ValueError(
-            f"Unknown detector '{detector_name}'. Choose from: {detector_names}"
-        )
-
-    if detector_name == "oracle":
-        detector: LieDetectorFn = OracleDetector(report_style=report_style)
-    elif detector_name == "always_50":
-        detector = Always50Detector(report_style=report_style)
-    elif detector_name == "coin_flip":
-        detector = CoinFlipDetector(report_style=report_style)
-    elif detector_name == "behavioral":
-        detector = make_behavioral_detector(suspect_model)
-    elif detector_name == "behavioral_hardened":
-        detector = make_behavioral_detector(
-            suspect_model,
-            probe_system_prompt=SUSPECT_PROMPTS["debate_coach_hardened"],
-        )
-    elif detector_name == "llm_score":
-        detector = make_llm_score_detector(detector_model, report_style=report_style)
-    elif detector_name == "llm_report":
-        detector = make_llm_report_detector(detector_model)
-    elif detector_name == "apollo_probe":
-        if not probe_path:
-            raise ValueError(
-                "detector_name='apollo_probe' requires probe_path. "
-                "Pass -T probe_path=/path/to/probe.pt."
+    }
+    if detector_name in builtin_detectors:
+        if detector_name == "oracle":
+            detector: LieDetectorFn = OracleDetector(report_style=report_style)
+        elif detector_name == "always_50":
+            detector = Always50Detector(report_style=report_style)
+        elif detector_name == "coin_flip":
+            detector = CoinFlipDetector(report_style=report_style)
+        elif detector_name == "behavioral":
+            detector = make_behavioral_detector(suspect_model)
+        elif detector_name == "behavioral_hardened":
+            detector = make_behavioral_detector(
+                suspect_model,
+                probe_system_prompt=SUSPECT_PROMPTS["debate_coach_hardened"],
             )
-        detector = ApolloProbeDetector(
-            model_path=probe_model_path,
-            probe_path=probe_path,
-            suspect_system=SUSPECT_PROMPTS[suspect_prompt],
-            layer=probe_layer,
-            pooling=probe_pooling,
-            report_style=report_style,
-        )
+        elif detector_name == "llm_score":
+            detector = make_llm_score_detector(detector_model, report_style=report_style)
+        else:  # llm_report
+            detector = make_llm_report_detector(detector_model)
     else:
-        if not balcells_probe_dir:
-            raise ValueError(
-                "detector_name='balcells_probe' requires balcells_probe_dir. "
-                "Pass -T balcells_probe_dir=probes/balcells/llama3_3_70b_lora_lambda_kl_0_05."
-            )
-        detector = BalcellsProbeDetector(
+        # Anything else is treated as a white-box probe name registered in
+        # `lib.probes.load_probe(...)` — apollo_roleplaying / balcells_linear /
+        # balcells_lora_kl / repe_lat / wmdp_full_arg / etc.
+        detector = WhiteboxProbeDetector(
             model_path=probe_model_path,
-            probe_dir=balcells_probe_dir,
+            probe_name=detector_name,
             suspect_system=SUSPECT_PROMPTS[suspect_prompt],
             pooling=probe_pooling,
             report_style=report_style,
