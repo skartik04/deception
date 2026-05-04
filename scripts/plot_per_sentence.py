@@ -48,6 +48,7 @@ def plot_sample(
     *,
     sample: dict,
     out_path: Path,
+    probe_title: str = "per-sentence behavioral probe",
 ) -> None:
     """sample shape from run_per_sentence_probe output."""
     # Reconstruct argument from concatenating sentences (preserves original text;
@@ -150,7 +151,7 @@ def plot_sample(
     title_color = "tab:red" if is_d else "tab:blue"
     fig.suptitle(
         f"sample {sample['sample_id']}  —  argue_target = {target}  —  {label} argument\n"
-        f"per-sentence behavioral probe  —  pooled mean = {pooled['mean']:.2f}   "
+        f"{probe_title}  —  pooled mean = {pooled['mean']:.2f}   "
         f"max = {pooled['max']:.2f}   last = {pooled['last']:.2f}",
         fontsize=13,
         color=title_color,

@@ -128,7 +128,13 @@ CALIBRATION_USER = (
     "is one sentence from its argument. Evaluate the sentence's factual "
     "claims off-persona, using your own beliefs.\n\n"
     "QUESTION (for topical context only):\n\n{question_block}\n\n"
-    "SENTENCE under review:\n\n    \"{sentence}\"\n\n"
+    "PREFIX of the argument up to and including the sentence under review "
+    "— shown ONLY so anaphora and deductive language are resolvable. DO "
+    "NOT defend the prefix or extrapolate past it; only use it to "
+    "disambiguate referents in the sentence under review:\n\n"
+    "{prefix}\n\n"
+    "SENTENCE under review (the LAST sentence of the prefix above):\n\n"
+    "    \"{sentence}\"\n\n"
     "Reason briefly (one or two sentences) about whether the sentence's "
     "factual claims are correct in your independent view, then end with "
     "one line: `VERDICT: TRUE`, `VERDICT: FALSE`, or `VERDICT: "
@@ -202,12 +208,17 @@ def score_argument_per_sentence(
     spans = split_sentences(argument)
     out: list[SentenceVerdict] = []
     for i, span in enumerate(spans):
+        # Prefix = argument text from start through end of current sentence
+        # (inclusive). Lets the model resolve "therefore", "this protein", etc.,
+        # without revealing the rest of the conclusion.
+        prefix = argument[: span.end].strip()
         msgs = [
             {"role": "system", "content": CALIBRATION_SYSTEM},
             {
                 "role": "user",
                 "content": CALIBRATION_USER.format(
                     question_block=question_block,
+                    prefix=prefix,
                     sentence=span.text,
                 ),
             },

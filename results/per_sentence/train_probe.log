@@ -1,0 +1,63 @@
+Built payload: 30 samples
+Flash call 1/6 (5 samples)
+  job 00095025-6109-4188-b4f2-af97cfdb9b45-e1 queued; polling...
+  status=IN_QUEUE
+  status=IN_QUEUE
+  status=IN_QUEUE
+  status=IN_QUEUE
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=COMPLETED
+  got 77 sentence activations
+Flash call 2/6 (5 samples)
+  job c696b97f-4cfe-47d6-9f5b-07bc9f8b80bd-e2 queued; polling...
+  status=COMPLETED
+  got 67 sentence activations
+Flash call 3/6 (5 samples)
+  job ce592940-1abe-4f28-820f-833f9d5bd048-e2 queued; polling...
+  status=COMPLETED
+  got 70 sentence activations
+Flash call 4/6 (5 samples)
+  job 48e445e8-29fd-4f9c-a9a1-d077da9d3561-e2 queued; polling...
+  status=COMPLETED
+  got 71 sentence activations
+Flash call 5/6 (5 samples)
+  job f19d3830-7a03-418d-9ea7-bf028cb43eb9-e1 queued; polling...
+  status=COMPLETED
+  got 75 sentence activations
+Flash call 6/6 (5 samples)
+  job 4e998fa1-31fb-4a1c-8a47-b76a290b8bed-e1 queued; polling...
+  status=COMPLETED
+  got 71 sentence activations
+Cached activations to results/per_sentence/activations_cache.npz
+Sentences: total 431; used 339 after dropping label==0.5; pos (FALSE) = 33
+Sample-level split: 21 train / 9 test samples
+Layer 22: train_AUROC=1.0000 test_AUROC=0.8303 (n_train=240, n_test=99)
+
+Best layer: 22 (test_AUROC=0.8303)
+Saved probe to probes/per_sentence_behavioral.pt
+Saved summary to probes/per_sentence_behavioral.summary.json

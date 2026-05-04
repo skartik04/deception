@@ -61,6 +61,7 @@ apollo_volume = NetworkVolume(
     volume=apollo_volume,
     template=PodTemplate(containerDiskInGb=80),
     workers=(0, 1),
+    gpu_count=2,  # Llama 3.3 70B BF16 = 140 GB; needs 2× 80 GB GPU.
     idle_timeout=600,
     execution_timeout_ms=4_800_000,
     env={
