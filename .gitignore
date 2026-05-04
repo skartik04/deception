@@ -41,3 +41,28 @@ SESSION.md
 EXPERIMENTS.md
 CLAUDE.local.md
 HANDOVER.md
+
+#liars-bench
+liars-bench/
+
+# Trash (pre-deletion staging)
+trash/
+
+# Local model weights / probe checkpoints (multi-GB)
+probes/
+
+# Flash build artifacts and per-project venvs
+flash_*/.flash/
+flash_*/.venv/
+flash_*/*.egg-info/
+
+# PDFs of papers
+*.pdf
+
+# Large per-token result dumps that aren't worth tracking
+results/per_token/
+
+# Misc local caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/

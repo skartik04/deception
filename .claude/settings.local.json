@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p /workspace/.claude/skills)",
+      "Bash(mv /workspace/.claude-kris/skills/update-setup /workspace/.claude/skills/)",
+      "Bash(ln -s /workspace/.claude/skills /workspace/.claude-kris/skills)",
+      "Skill(update-config)",
+      "Bash(python3 /workspace/.claude/hooks/notify.py permission_prompt)",
+      "Bash(python3 /workspace/.claude/hooks/notify.py tool_failure_interrupt)"
+    ]
+  }
+}

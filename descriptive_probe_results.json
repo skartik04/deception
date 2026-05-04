@@ -1,0 +1,10 @@
+{
+  "n_test_honest": 25,
+  "n_test_deceptive": 25,
+  "AUROCs": {
+    "mean": 0.43520000000000003,
+    "max": 0.3248,
+    "last": 0.484
+  },
+  "probe": "Apollo descriptive (MMS, layer 22, train_data=descriptive_qa__pair)"
+}

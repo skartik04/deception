@@ -32,6 +32,8 @@ from inspect_ai.solver import Generate, Solver, TaskState, solver
 
 from lib.detectors import (
     Always50Detector,
+    ApolloProbeDetector,
+    BalcellsProbeDetector,
     CoinFlipDetector,
     LieDetectorFn,
     OracleDetector,
@@ -107,6 +109,11 @@ def interrogation_single_turn_detector(
     allow_idk: bool = False,
     answer_focused: bool = False,
     filter_files: str = "",
+    probe_path: str = "",
+    probe_model_path: str = "/workspace/models/llama-3.3-70b-instruct",
+    probe_layer: int = 22,
+    probe_pooling: str = "mean",
+    balcells_probe_dir: str = "",
 ) -> Task:
     """Interrogation with lie detector reports shown to judge. --model is the judge.
 
@@ -163,6 +170,8 @@ def interrogation_single_turn_detector(
         "behavioral_hardened",
         "llm_score",
         "llm_report",
+        "apollo_probe",
+        "balcells_probe",
     ]
     if detector_name not in detector_names:
         raise ValueError(
@@ -184,8 +193,35 @@ def interrogation_single_turn_detector(
         )
     elif detector_name == "llm_score":
         detector = make_llm_score_detector(detector_model, report_style=report_style)
-    else:
+    elif detector_name == "llm_report":
         detector = make_llm_report_detector(detector_model)
+    elif detector_name == "apollo_probe":
+        if not probe_path:
+            raise ValueError(
+                "detector_name='apollo_probe' requires probe_path. "
+                "Pass -T probe_path=/path/to/probe.pt."
+            )
+        detector = ApolloProbeDetector(
+            model_path=probe_model_path,
+            probe_path=probe_path,
+            suspect_system=SUSPECT_PROMPTS[suspect_prompt],
+            layer=probe_layer,
+            pooling=probe_pooling,
+            report_style=report_style,
+        )
+    else:
+        if not balcells_probe_dir:
+            raise ValueError(
+                "detector_name='balcells_probe' requires balcells_probe_dir. "
+                "Pass -T balcells_probe_dir=probes/balcells/llama3_3_70b_lora_lambda_kl_0_05."
+            )
+        detector = BalcellsProbeDetector(
+            model_path=probe_model_path,
+            probe_dir=balcells_probe_dir,
+            suspect_system=SUSPECT_PROMPTS[suspect_prompt],
+            pooling=probe_pooling,
+            report_style=report_style,
+        )
 
     if filter_files and filtering:
         raise ValueError(

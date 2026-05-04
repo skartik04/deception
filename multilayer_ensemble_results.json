@@ -1,0 +1,21 @@
+{
+  "layers": [
+    16,
+    32,
+    48,
+    64,
+    76
+  ],
+  "n_train_honest": 80,
+  "n_train_deceptive": 80,
+  "n_test_honest": 25,
+  "n_test_deceptive": 25,
+  "per_layer_AUROC": {
+    "16": 0.3808,
+    "32": 0.36960000000000004,
+    "48": 0.4256,
+    "64": 0.44000000000000006,
+    "76": 0.3872
+  },
+  "ensemble_AUROC": 0.3824
+}

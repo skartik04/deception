@@ -1,0 +1,35 @@
+{
+  "n_test_honest": 25,
+  "n_test_deceptive": 25,
+  "answer_mask_tokens_sample0": {
+    "honest": 5,
+    "deceptive": 5
+  },
+  "AUROCs": {
+    "roleplaying": {
+      "mean": 0.26239999999999997,
+      "max": 0.304,
+      "last": 0.2768
+    },
+    "followup": {
+      "mean": 0.664,
+      "max": 0.464,
+      "last": 0.608
+    },
+    "instructed_pairs": {
+      "mean": 0.304,
+      "max": 0.37600000000000006,
+      "last": 0.3328
+    },
+    "CUSTOM (all-token)": {
+      "mean": 0.8288,
+      "max": 0.7824,
+      "last": 0.7776000000000001
+    },
+    "CUSTOM (ANSWER-only)": {
+      "mean": 0.7568,
+      "max": 0.7648,
+      "last": 0.7696
+    }
+  }
+}

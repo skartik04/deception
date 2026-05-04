@@ -12,6 +12,22 @@ dependencies = [
     "pandas>=3.0.1",
     "python-dotenv>=1.2.2",
     "pyyaml>=6.0.3",
+    "torch>=2.0.0,<2.11",
+    "transformers>=4.40.0,<5.0",
+    "bitsandbytes>=0.43.0",
+    "accelerate>=0.27.0",
+    "fire>=0.7.1",
+    "einops>=0.8.2",
+    "jaxtyping>=0.3.9",
+    "peft>=0.19.1",
+    "goodfire>=0.3.5",
+    "anthropic>=0.97.0",
+    "together>=2.10.0",
+    "plotly>=6.7.0",
+    "circuitsvis>=1.43.3",
+    "matplotlib>=3.10.9",
+    "seaborn>=0.13.2",
+    "runpod-flash>=1.16.0",
 ]
 
 [dependency-groups]
