@@ -105,11 +105,21 @@ def plot_sample(
         seg_tokens = tokens[lo:hi]
         seg_sidx = per_tok_sentence_idx[lo:hi]
         x = list(range(hi - lo))
-        colors = [
+        # Colored background strip: full height, categorical color, so TRUE
+        # (score 0) sentences are still visible. Bar height encodes the actual
+        # score on top, in a darker shade.
+        bg_colors = [
+            "#fbb4b4" if s > 0.5 else "#bbd9f5" if s < 0.5 else "#d9d9d9"
+            for s in seg_scores
+        ]
+        fg_colors = [
             "tab:red" if s > 0.5 else "tab:blue" if s < 0.5 else "tab:gray"
             for s in seg_scores
         ]
-        ax.bar(x, seg_scores, color=colors, width=0.85)
+        # Background: full-height strip
+        ax.bar(x, [1.0] * len(x), color=bg_colors, width=1.0, alpha=0.6)
+        # Foreground: actual score height
+        ax.bar(x, seg_scores, color=fg_colors, width=0.85)
         ax.axhline(0.5, color="black", linewidth=0.6, linestyle="--", alpha=0.4)
         ax.set_ylim(0, 1.15)
         ax.set_xlim(-0.6, len(x) - 0.4)
