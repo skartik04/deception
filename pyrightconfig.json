@@ -1,0 +1,22 @@
+{
+  "extraPaths": ["liars-bench/src/probes"],
+  "include": [
+    "lib",
+    "tasks",
+    "scripts",
+    "flash_app",
+    "eval_probes.py"
+  ],
+  "exclude": [
+    "trash",
+    "mess",
+    "notebooks",
+    "notes",
+    "liars-bench",
+    "logs",
+    "logs_new",
+    "**/.venv",
+    "**/__pycache__"
+  ],
+  "reportMissingImports": "warning"
+}

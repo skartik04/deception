@@ -1,0 +1,90 @@
+Built payload: 30 samples
+Flash call 1/10 (3 samples)
+  job ce5a4e63-ef7c-45c0-883f-14438b21d077-e1 queued; polling...
+  status=COMPLETED
+  got 43 sentence activations
+Flash call 2/10 (3 samples)
+  job 9d9a7ad5-1a4b-43a9-bb35-1d334d4c3218-e2 queued; polling...
+  status=COMPLETED
+  got 48 sentence activations
+Flash call 3/10 (3 samples)
+  job afd01bfb-30b1-4dfd-a7f5-f4eccefe1538-e1 queued; polling...
+  status=COMPLETED
+  got 39 sentence activations
+Flash call 4/10 (3 samples)
+  job 4d5505ee-c39d-4c22-97b7-024f63a7df51-e1 queued; polling...
+  status=COMPLETED
+  got 42 sentence activations
+Flash call 5/10 (3 samples)
+  job 19ee1468-f253-46f8-90cb-1cb6e38c0968-e1 queued; polling...
+  status=COMPLETED
+  got 42 sentence activations
+Flash call 6/10 (3 samples)
+  job ae6b2d67-fc71-4c65-9b51-5ae13acfc531-e2 queued; polling...
+  status=COMPLETED
+  got 41 sentence activations
+Flash call 7/10 (3 samples)
+  job bde6d21f-ce4e-4a0d-9da1-c1699a1cc301-e1 queued; polling...
+  status=COMPLETED
+  got 44 sentence activations
+Flash call 8/10 (3 samples)
+  job 0df9f580-6113-43c2-99a6-0f7f35ea7b56-e1 queued; polling...
+  status=COMPLETED
+  got 48 sentence activations
+Flash call 9/10 (3 samples)
+  job d9309653-033e-4c48-9857-11a520d371cd-e2 queued; polling...
+  status=COMPLETED
+  got 38 sentence activations
+Flash call 10/10 (3 samples)
+  job bcfa5038-57b3-46fa-bae9-11fb8831a6d3-e1 queued; polling...
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=IN_PROGRESS
+  status=FAILED
+Traceback (most recent call last):
+  File "/workspace/gergely_deception/scripts/train_per_sentence_probe.py", line 359, in <module>
+    main()
+  File "/workspace/gergely_deception/scripts/train_per_sentence_probe.py", line 203, in main
+    out = _post_flash(
+          ^^^^^^^^^^^^
+  File "/workspace/gergely_deception/scripts/train_per_sentence_probe.py", line 126, in _post_flash
+    raise RuntimeError(f"Flash job {job_id} {status}: {st}")
+RuntimeError: Flash job bcfa5038-57b3-46fa-bae9-11fb8831a6d3-e1 FAILED: {'delayTime': 390467, 'error': 'job timed out after 1 retries', 'executionTime': 228382, 'id': 'bcfa5038-57b3-46fa-bae9-11fb8831a6d3-e1', 'retries': 1, 'status': 'FAILED', 'workerId': '6csjlev0gv4as8'}

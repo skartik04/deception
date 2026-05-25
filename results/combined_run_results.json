@@ -1,0 +1,22 @@
+{
+  "reproduction": {
+    "task": "instructed_pairs probe on roleplaying__plain",
+    "n_deceptive_kept": 251,
+    "n_honest_kept": 120,
+    "auroc_mean": 0.9135,
+    "auroc_max": 0.8690,
+    "auroc_last": 0.8266,
+    "reported": 0.9637,
+    "verification": "FIXED dialogue lifts AUROC from 0.4574 (broken) to 0.9135 (theory verified)"
+  },
+  "wmdp_test": {
+    "split": "30 honest + 30 deceptive train, 20 honest + 20 deceptive test",
+    "AUROCs": {
+      "roleplaying":      {"mean": 0.4000, "max": 0.4575, "last": 0.4475},
+      "followup":         {"mean": 0.7375, "max": 0.5075, "last": 0.7575},
+      "instructed_pairs": {"mean": 0.4550, "max": 0.4850, "last": 0.6750},
+      "CUSTOM_WMDP":      {"mean": 0.7025, "max": 0.6900, "last": 0.7350}
+    }
+  },
+  "custom_probe_path": "probes/wmdp_bio_interrogation_custom_layer22.pt"
+}

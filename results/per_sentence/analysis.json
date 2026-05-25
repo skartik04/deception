@@ -1,0 +1,45 @@
+{
+  "n_samples": 30,
+  "AUROCs": {
+    "per_sentence_ternary_mean": 0.7666666666666666,
+    "per_sentence_ternary_max": 0.7333333333333334,
+    "per_sentence_ternary_last": 0.5,
+    "whole_arg_baseline": 0.8933333333333333,
+    "combined_max(ternary_max, whole_arg)": 0.7666666666666666,
+    "per_sentence_continuous_mean": 0.7155555555555555,
+    "per_sentence_continuous_max": 0.6933333333333334,
+    "per_sentence_continuous_last": 0.7844444444444445,
+    "combined_max(continuous_max, whole_arg)": 0.7422222222222222,
+    "_continuous_n_samples": 30.0
+  },
+  "verdict_distribution": {
+    "honest_arguments": {
+      "TRUE": 163,
+      "FALSE": 9,
+      "INSUFFICIENT_INFO": 43
+    },
+    "deceptive_arguments": {
+      "INSUFFICIENT_INFO": 49,
+      "TRUE": 143,
+      "FALSE": 24
+    }
+  },
+  "locality": {
+    "confusion_probe_vs_gt": {
+      "INSUFFICIENT_INFO|NEUTRAL": 20,
+      "TRUE|TRUE": 87,
+      "TRUE|NEUTRAL": 13,
+      "INSUFFICIENT_INFO|TRUE": 7,
+      "TRUE|FALSE": 4,
+      "FALSE|FALSE": 6,
+      "INSUFFICIENT_INFO|FALSE": 2,
+      "FALSE|TRUE": 5,
+      "FALSE|NEUTRAL": 1,
+      "TRUE|PARSE_FAIL": 1
+    },
+    "false_recall": 0.5,
+    "true_specificity": 0.9494949494949495,
+    "n_sentences_evaluated": 146,
+    "judge_model": "anthropic/claude-3-haiku"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "best_layer": 22,
+  "n_samples": 30,
+  "sample_AUROCs": {
+    "trained_probe": {
+      "mean": 0.64,
+      "max": 0.7733333333333334,
+      "last": 0.6622222222222223
+    },
+    "behavioral_labels": {
+      "mean": 0.7666666666666666,
+      "max": 0.7333333333333334,
+      "last": 0.5
+    },
+    "whole_arg_baseline": {
+      "single": 0.8933333333333333
+    }
+  },
+  "trained_probe_per_sentence_locality": {
+    "n_sentences_evaluated": 146,
+    "false_recall": 0.8333333333333334,
+    "true_specificity": 0.5757575757575758,
+    "per_sentence_auroc": 0.7920875420875422,
+    "judge_model": "anthropic/claude-3-haiku"
+  },
+  "training_summary": {
+    "best_layer": 22,
+    "best_test_auroc": 0.8303370786516854,
+    "per_layer": {
+      "22": {
+        "train_auroc": 1.0,
+        "test_auroc": 0.8303370786516854,
+        "intercept": -7.168812041889494,
+        "n_train": 240,
+        "n_test": 99
+      }
+    },
+    "n_train_samples": 21,
+    "n_test_samples": 9,
+    "labels_source": "results/per_sentence/main_run.json",
+    "eval_log": "logs/2026-05-03T21-37-34-00-00_interrogation-single-turn-detector_avAxSJGz85ooGeday4Tuzy.eval"
+  }
+}
